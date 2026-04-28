@@ -11,26 +11,54 @@ Run each app in a separate terminal.
 
 - Go `1.23+`
 - Node.js `18+` and npm
-- PostgreSQL database accessible via `DATABASE_URL`
+- PostgreSQL database (URL is configured in `backend/config/<APP_ENV>.yaml`)
 
 ## 1) Run the backend API
 
 1. Open a terminal in `backend`.
-2. Copy env template:
-   - PowerShell: `Copy-Item .env.example .env`
-   - Bash: `cp .env.example .env`
-3. Update `backend/.env` (minimum required):
-   - `DATABASE_URL`
-   - `JWT_SECRET`
-4. Install dependencies (optional, `go run` can also fetch automatically):
+2. Copy `backend/.env.example` to `backend/.env` and set **`APP_ENV`** to one of **`dev`**, **`stag`**, or **`prod`**. Only this file is read from dotenv; everything else comes from YAML.
+3. Edit the matching config file:
+   - `APP_ENV=dev` → `backend/config/dev.yaml`
+   - `APP_ENV=stag` → `backend/config/stag.yaml`
+   - `APP_ENV=prod` → `backend/config/prod.yaml`
+   
+   At minimum set **`database_url`** and **`jwt_secret`** (see keys in `dev.yaml`).
+4. Install dependencies (optional):
    - `go mod download`
-5. Start server:
-   - `go run ./cmd/server`
+5. Start the server from `backend`:
+   - `go run .` or `go run main.go`
 
 Expected result:
 
 - API listens on `http://localhost:8080`
 - Routes are under `http://localhost:8080/api`
+
+### Connect PostgreSQL with pgAdmin (localhost)
+
+Use the same host, port, database name, and user as in `database_url` inside your active YAML (for local dev, usually `backend/config/dev.yaml`). If your local PostgreSQL user has **no password** (common with `trust` / `peer` auth), leave **Password** empty in pgAdmin and use a URL **without** `:PASSWORD` — for example `postgres://postgres@localhost:5432/carmanage?sslmode=disable`.
+
+Example local setup (adjust names/passwords to match what you create in PostgreSQL):
+
+1. In pgAdmin: **Object → Register → Server**.
+2. **General** tab: **Name** — e.g. `CM-P2P local`.
+3. **Connection** tab:
+
+| Field | Example (local) |
+| --- | --- |
+| Host name/address | `localhost` |
+| Port | `5432` |
+| Maintenance database | `postgres` (or your DB name if it already exists) |
+| Username | `carmanage` |
+| Password | Leave blank if your local user has no password; otherwise enter it |
+| Save password? | Optional |
+
+4. Create an application database if needed: **Databases → Create → Database** — e.g. `carmanage`.
+5. Set `database_url` in `backend/config/dev.yaml` (or the YAML for your `APP_ENV`) to match, for example:
+
+- With password: `postgres://carmanage:YOUR_PASSWORD@localhost:5432/carmanage?sslmode=disable`
+- **No password:** `postgres://carmanage@localhost:5432/carmanage?sslmode=disable` (no `:` before `@`)
+
+For local PostgreSQL without TLS, `sslmode=disable` is typical. Remote/Azure usually uses `sslmode=require`.
 
 ## 1.1) Apply SQL migration manually (optional)
 
@@ -61,7 +89,7 @@ From `backend`:
 Requirements:
 
 - `psql` must be installed and available in `PATH`
-- `DATABASE_URL` must be set (or pass `-DatabaseUrl` to `migrate.ps1`)
+- Set **`DATABASE_URL`** in the shell to the same value as **`database_url`** in your YAML (the migrate scripts do not read YAML). Example: copy `database_url` from `config/dev.yaml`, then in PowerShell `$env:DATABASE_URL = "postgres://..."` before running the script.
 
 ## 2) Run the frontend web app
 
@@ -92,7 +120,7 @@ In `backend/.env`, these are optional for local development:
 
 Terminal 1 (backend):
 
-`cd backend && go run ./cmd/server`
+`cd backend && go run .`
 
 Terminal 2 (frontend):
 

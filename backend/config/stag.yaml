@@ -1,0 +1,20 @@
+# Staging (APP_ENV=stag)
+http_port: "8080"
+gin_mode: release
+
+database_url: "" # set for your staging database
+
+jwt_secret: "" # required — set a strong secret for staging
+jwt_ttl_hours: 72
+
+allow_self_kyc_verify: false
+
+azure:
+  storage_account: ""
+  storage_key: ""
+  storage_container: ""
+
+twilio:
+  account_sid: ""
+  auth_token: ""
+  from_number: ""

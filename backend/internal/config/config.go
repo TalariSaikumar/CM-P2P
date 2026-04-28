@@ -3,14 +3,28 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
+	"gopkg.in/yaml.v3"
 )
 
-// Config holds application configuration loaded from the environment.
+// Environment names must match files under backend/config/<name>.yaml
+const (
+	EnvDev  = "dev"
+	EnvStag = "stag"
+	EnvProd = "prod"
+)
+
+// Config holds application configuration from backend/config/<APP_ENV>.yaml
+// after reading APP_ENV from backend/.env (or the process environment).
 type Config struct {
+	Environment string
+
 	HTTPPort string
+	GinMode  string
 
 	DatabaseURL string
 
@@ -24,55 +38,113 @@ type Config struct {
 	TwilioAuthToken  string
 	TwilioFromNumber string
 
-	// AllowSelfKycVerify enables POST /api/me/complete-kyc for demo/local environments only.
 	AllowSelfKycVerify bool
-
-	// JWTTTLHours controls access token lifetime (default 72).
-	JWTTTLHours int
+	JWTTTLHours        int
 }
 
-// Load reads configuration from the environment. If path is non-empty, loads .env from that path first.
-func Load(dotEnvPath string) (*Config, error) {
-	if dotEnvPath != "" {
-		_ = godotenv.Load(dotEnvPath)
-	} else {
-		_ = godotenv.Load()
+type yamlFile struct {
+	HTTPPort string `yaml:"http_port"`
+	GinMode  string `yaml:"gin_mode"`
+
+	DatabaseURL string `yaml:"database_url"`
+
+	JWTSecret   string `yaml:"jwt_secret"`
+	JWTTTLHours int    `yaml:"jwt_ttl_hours"`
+
+	AllowSelfKycVerify *bool `yaml:"allow_self_kyc_verify"`
+
+	Azure struct {
+		StorageAccount   string `yaml:"storage_account"`
+		StorageKey       string `yaml:"storage_key"`
+		StorageContainer string `yaml:"storage_container"`
+	} `yaml:"azure"`
+
+	Twilio struct {
+		AccountSID string `yaml:"account_sid"`
+		AuthToken  string `yaml:"auth_token"`
+		FromNumber string `yaml:"from_number"`
+	} `yaml:"twilio"`
+}
+
+// Load reads backend/.env for APP_ENV only, then loads backend/config/<APP_ENV>.yaml.
+// backendRoot is the directory that contains .env and the config/ folder (the module root).
+func Load(backendRoot string) (*Config, error) {
+	envPath := filepath.Join(backendRoot, ".env")
+	if _, err := os.Stat(envPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("missing %s: create it with APP_ENV=dev|stag|prod", envPath)
+		}
+		return nil, fmt.Errorf("stat .env: %w", err)
+	}
+	if err := godotenv.Load(envPath); err != nil {
+		return nil, fmt.Errorf("load .env: %w", err)
 	}
 
-	port := os.Getenv("HTTP_PORT")
+	rawEnv := strings.TrimSpace(strings.ToLower(os.Getenv("APP_ENV")))
+	if rawEnv == "" {
+		return nil, fmt.Errorf("APP_ENV is required in .env (use dev, stag, or prod)")
+	}
+	switch rawEnv {
+	case EnvDev, EnvStag, EnvProd:
+	default:
+		return nil, fmt.Errorf("APP_ENV must be one of dev, stag, prod; got %q", rawEnv)
+	}
+
+	yamlPath := filepath.Join(backendRoot, "config", rawEnv+".yaml")
+	data, err := os.ReadFile(yamlPath)
+	if err != nil {
+		return nil, fmt.Errorf("read config %s: %w", yamlPath, err)
+	}
+
+	var y yamlFile
+	if err := yaml.Unmarshal(data, &y); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", yamlPath, err)
+	}
+
+	port := strings.TrimSpace(y.HTTPPort)
 	if port == "" {
 		port = "8080"
 	}
+	ginMode := strings.TrimSpace(y.GinMode)
+	if ginMode == "" {
+		ginMode = "debug"
+	}
 
-	dbURL := os.Getenv("DATABASE_URL")
+	dbURL := strings.TrimSpace(y.DatabaseURL)
 	if dbURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
+		return nil, fmt.Errorf("database_url is required in %s", yamlPath)
 	}
 
-	jwt := os.Getenv("JWT_SECRET")
+	jwt := strings.TrimSpace(y.JWTSecret)
 	if jwt == "" {
-		return nil, fmt.Errorf("JWT_SECRET is required")
+		return nil, fmt.Errorf("jwt_secret is required in %s", yamlPath)
 	}
 
-	selfKyc := os.Getenv("ALLOW_SELF_KYC_VERIFY") == "true" || os.Getenv("ALLOW_SELF_KYC_VERIFY") == "1"
+	selfKyc := false
+	if y.AllowSelfKycVerify != nil {
+		selfKyc = *y.AllowSelfKycVerify
+	}
 
-	jwtHours := 72
-	if v := os.Getenv("JWT_TTL_HOURS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 720 {
-			jwtHours = n
-		}
+	jwtHours := y.JWTTTLHours
+	if jwtHours <= 0 {
+		jwtHours = 72
+	}
+	if jwtHours > 720 {
+		jwtHours = 720
 	}
 
 	return &Config{
+		Environment:           rawEnv,
 		HTTPPort:              port,
+		GinMode:               ginMode,
 		DatabaseURL:           dbURL,
 		JWTSecret:             jwt,
-		AzureStorageAccount:   os.Getenv("AZURE_STORAGE_ACCOUNT"),
-		AzureStorageKey:       os.Getenv("AZURE_STORAGE_KEY"),
-		AzureStorageContainer: os.Getenv("AZURE_STORAGE_CONTAINER"),
-		TwilioAccountSID:      os.Getenv("TWILIO_ACCOUNT_SID"),
-		TwilioAuthToken:       os.Getenv("TWILIO_AUTH_TOKEN"),
-		TwilioFromNumber:      os.Getenv("TWILIO_FROM_NUMBER"),
+		AzureStorageAccount:   strings.TrimSpace(y.Azure.StorageAccount),
+		AzureStorageKey:       strings.TrimSpace(y.Azure.StorageKey),
+		AzureStorageContainer: strings.TrimSpace(y.Azure.StorageContainer),
+		TwilioAccountSID:      strings.TrimSpace(y.Twilio.AccountSID),
+		TwilioAuthToken:       strings.TrimSpace(y.Twilio.AuthToken),
+		TwilioFromNumber:      strings.TrimSpace(y.Twilio.FromNumber),
 		AllowSelfKycVerify:    selfKyc,
 		JWTTTLHours:           jwtHours,
 	}, nil

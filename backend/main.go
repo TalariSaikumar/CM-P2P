@@ -5,6 +5,7 @@ import (
 	"log"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"carmanage/backend/internal/config"
 	"carmanage/backend/internal/database"
@@ -21,12 +22,18 @@ import (
 
 func main() {
 	_, file, _, _ := runtime.Caller(0)
-	backendRoot := filepath.Join(filepath.Dir(file), "..", "..")
-	envPath := filepath.Join(backendRoot, ".env")
+	backendRoot := filepath.Dir(file)
 
-	cfg, err := config.Load(envPath)
+	cfg, err := config.Load(backendRoot)
 	if err != nil {
 		log.Fatalf("config: %v", err)
+	}
+
+	switch strings.ToLower(cfg.GinMode) {
+	case "release":
+		gin.SetMode(gin.ReleaseMode)
+	default:
+		gin.SetMode(gin.DebugMode)
 	}
 
 	db, err := database.NewPostgres(cfg.DatabaseURL, logger.Warn)
@@ -66,10 +73,6 @@ func main() {
 	carSvc := &service.CarService{Deps: svcDeps}
 	bookingSvc := &service.BookingService{Deps: svcDeps}
 
-	if gin.Mode() == gin.ReleaseMode {
-		gin.SetMode(gin.ReleaseMode)
-	}
-
 	r := gin.New()
 	r.Use(gin.Logger())
 	r.Use(middleware.RequestID())
@@ -89,7 +92,7 @@ func main() {
 	})
 
 	addr := fmt.Sprintf(":%s", cfg.HTTPPort)
-	log.Printf("listening on %s", addr)
+	log.Printf("env=%s listening on %s", cfg.Environment, addr)
 	if err := r.Run(addr); err != nil {
 		log.Fatalf("server: %v", err)
 	}
