@@ -1,0 +1,5 @@
+BEGIN;
+
+DROP TABLE IF EXISTS kyc_attachments CASCADE;
+
+COMMIT;
