@@ -3,7 +3,7 @@
 http_port: "8080"
 gin_mode: debug
 
-database_url: "postgres://postgres:sai123@localhost:5432/carmanage?sslmode=disable"
+database_url: "postgres://postgres:postgres@localhost:5432/carmanage?sslmode=disable"
 
 jwt_secret: "change-me-in-development-only"
 jwt_ttl_hours: 72
@@ -19,3 +19,4 @@ twilio:
   account_sid: ""
   auth_token: ""
   from_number: ""
+  support_email: ""

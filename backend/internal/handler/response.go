@@ -116,6 +116,10 @@ type bookingPublic struct {
 	Status              string  `json:"status"`
 	FinalBookingPrice   *string `json:"final_booking_price,omitempty"`
 	CustomerNote        string  `json:"customer_note,omitempty"`
+	RentalFrom          string  `json:"rental_from"`
+	RentalTo            string  `json:"rental_to"`
+	PickupPoint         string  `json:"pickup_point"`
+	DropPoint           string  `json:"drop_point"`
 	CreatedAt           string      `json:"created_at"`
 	Car                 carPublic   `json:"car"`
 	Customer            userSummary `json:"customer"`
@@ -139,6 +143,10 @@ func toBookingPublic(b *models.Booking) bookingPublic {
 		Status:            string(b.Status),
 		FinalBookingPrice: ptrDec(b.FinalBookingPrice),
 		CustomerNote:      b.CustomerNote,
+		RentalFrom:        b.RentalFrom.UTC().Format(time.RFC3339),
+		RentalTo:          b.RentalTo.UTC().Format(time.RFC3339),
+		PickupPoint:       b.PickupPoint,
+		DropPoint:         b.DropPoint,
 		CreatedAt:         b.CreatedAt.UTC().Format(time.RFC3339),
 		Car:        toCarPublic(&b.Car),
 		Customer:   toUserSummary(&b.Customer),

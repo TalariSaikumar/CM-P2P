@@ -133,15 +133,35 @@ func Load(backendRoot string) (*Config, error) {
 		jwtHours = 720
 	}
 
+	// Optional env overrides (backend/.env) so secrets are not committed in YAML.
+	if v := strings.TrimSpace(os.Getenv("DATABASE_URL")); v != "" {
+		dbURL = v
+	}
+	if v := strings.TrimSpace(os.Getenv("JWT_SECRET")); v != "" {
+		jwt = v
+	}
+	azureAccount := strings.TrimSpace(y.Azure.StorageAccount)
+	azureKey := strings.TrimSpace(y.Azure.StorageKey)
+	azureContainer := strings.TrimSpace(y.Azure.StorageContainer)
+	if v := strings.TrimSpace(os.Getenv("AZURE_STORAGE_ACCOUNT")); v != "" {
+		azureAccount = v
+	}
+	if v := strings.TrimSpace(os.Getenv("AZURE_STORAGE_KEY")); v != "" {
+		azureKey = v
+	}
+	if v := strings.TrimSpace(os.Getenv("AZURE_STORAGE_CONTAINER")); v != "" {
+		azureContainer = v
+	}
+
 	return &Config{
 		Environment:           rawEnv,
 		HTTPPort:              port,
 		GinMode:               ginMode,
 		DatabaseURL:           dbURL,
 		JWTSecret:             jwt,
-		AzureStorageAccount:   strings.TrimSpace(y.Azure.StorageAccount),
-		AzureStorageKey:       strings.TrimSpace(y.Azure.StorageKey),
-		AzureStorageContainer: strings.TrimSpace(y.Azure.StorageContainer),
+		AzureStorageAccount:   azureAccount,
+		AzureStorageKey:       azureKey,
+		AzureStorageContainer: azureContainer,
 		TwilioAccountSID:      strings.TrimSpace(y.Twilio.AccountSID),
 		TwilioAuthToken:       strings.TrimSpace(y.Twilio.AuthToken),
 		TwilioFromNumber:      strings.TrimSpace(y.Twilio.FromNumber),

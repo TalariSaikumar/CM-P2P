@@ -20,10 +20,21 @@ type BookingHandler struct {
 type createBookingReq struct {
 	CarID        string `json:"car_id" binding:"required,uuid"`
 	CustomerNote string `json:"customer_note"`
+	RentalFrom   string `json:"rental_from" binding:"required"`
+	RentalTo     string `json:"rental_to" binding:"required"`
+	PickupPoint  string `json:"pickup_point"`
+	DropPoint    string `json:"drop_point"`
 }
 
 type patchPriceReq struct {
 	FinalBookingPrice string `json:"final_booking_price" binding:"required"`
+}
+
+type patchTripReq struct {
+	RentalFrom  string `json:"rental_from" binding:"required"`
+	RentalTo    string `json:"rental_to" binding:"required"`
+	PickupPoint string `json:"pickup_point" binding:"required"`
+	DropPoint   string `json:"drop_point" binding:"required"`
 }
 
 type postMessageReq struct {
@@ -51,9 +62,23 @@ func (h *BookingHandler) Create(c *gin.Context) {
 		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid car id.")
 		return
 	}
+	from, err := service.ParseBookingDateTime(req.RentalFrom)
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid rental_from: use RFC3339 or YYYY-MM-DD.")
+		return
+	}
+	to, err := service.ParseBookingDateTime(req.RentalTo)
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid rental_to: use RFC3339 or YYYY-MM-DD.")
+		return
+	}
 	b, err := h.Svc.Create(c.Request.Context(), uid, service.CreateBookingInput{
 		CarID:        carID,
 		CustomerNote: req.CustomerNote,
+		RentalFrom:   from,
+		RentalTo:     to,
+		PickupPoint:  req.PickupPoint,
+		DropPoint:    req.DropPoint,
 	})
 	if err != nil {
 		if httpx.AbortService(c, err) {
@@ -176,6 +201,80 @@ func (h *BookingHandler) Confirm(c *gin.Context) {
 		return
 	}
 	b, err := h.Svc.Confirm(c.Request.Context(), uid, bid)
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b)})
+}
+
+func (h *BookingHandler) PatchTrip(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	var req patchTripReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Please check your input and try again.")
+		return
+	}
+	from, err := service.ParseBookingDateTime(req.RentalFrom)
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid rental_from: use RFC3339 or YYYY-MM-DD.")
+		return
+	}
+	to, err := service.ParseBookingDateTime(req.RentalTo)
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid rental_to: use RFC3339 or YYYY-MM-DD.")
+		return
+	}
+	b, err := h.Svc.UpdateTripDetails(c.Request.Context(), uid, bid, service.UpdateTripDetailsInput{
+		RentalFrom:  from,
+		RentalTo:    to,
+		PickupPoint: req.PickupPoint,
+		DropPoint:   req.DropPoint,
+	})
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b)})
+}
+
+func (h *BookingHandler) Withdraw(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	b, err := h.Svc.Withdraw(c.Request.Context(), uid, bid)
 	if err != nil {
 		if httpx.AbortService(c, err) {
 			return

@@ -66,6 +66,8 @@ func RegisterWithDeps(r *gin.RouterGroup, d Deps) {
 		custBook.Use(middleware.KYCVerified(d.DB))
 		{
 			custBook.POST("/bookings", bookH.Create)
+			custBook.PATCH("/bookings/:id/trip", bookH.PatchTrip)
+			custBook.POST("/bookings/:id/withdraw", bookH.Withdraw)
 		}
 
 		au.GET("/bookings/mine", bookH.Mine)
@@ -78,13 +80,7 @@ func RegisterWithDeps(r *gin.RouterGroup, d Deps) {
 		ownerPrice.Use(middleware.KYCVerified(d.DB))
 		{
 			ownerPrice.PATCH("/bookings/:id/price", bookH.PatchPrice)
-		}
-
-		custConfirm := au.Group("")
-		custConfirm.Use(middleware.RequireRole(models.RoleCustomer))
-		custConfirm.Use(middleware.KYCVerified(d.DB))
-		{
-			custConfirm.POST("/bookings/:id/confirm", bookH.Confirm)
+			ownerPrice.POST("/bookings/:id/confirm", bookH.Confirm)
 		}
 	}
 }

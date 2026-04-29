@@ -31,6 +31,7 @@ var (
 	ErrStorage          = NewError(http.StatusServiceUnavailable, "STORAGE_UNAVAILABLE", "File storage is not available right now. Please try again later.")
 	ErrKYCRequired      = NewError(http.StatusForbidden, "KYC_REQUIRED", "Complete identity verification before using this feature.")
 	ErrDrivingLicense   = NewError(http.StatusForbidden, "DRIVING_LICENSE_REQUIRED", "Add your verified driving license number to your profile before booking.")
+	ErrCarAlreadyBooked = NewError(http.StatusConflict, "CAR_ALREADY_BOOKED", "Already booked for this period. Try different dates or another vehicle.")
 )
 
 // WrapValidation returns a validation error with a specific message.

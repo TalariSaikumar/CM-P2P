@@ -34,6 +34,13 @@ type Booking struct {
 	// CustomerNote optional text from the initial booking inquiry.
 	CustomerNote string `gorm:"type:text"`
 
+	// Rental window and handover points (required on create for new rows).
+	// DB defaults satisfy AutoMigrate for existing rows before backfill; API still validates on create.
+	RentalFrom  time.Time `gorm:"type:timestamptz;not null;default:now()"`
+	RentalTo    time.Time `gorm:"type:timestamptz;not null;default:now()"`
+	PickupPoint string    `gorm:"type:text;not null;default:''"`
+	DropPoint   string    `gorm:"type:text;not null;default:''"`
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`

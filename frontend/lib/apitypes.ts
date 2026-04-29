@@ -31,6 +31,10 @@ export type Booking = {
   status: string;
   final_booking_price?: string | null;
   customer_note?: string;
+  rental_from: string;
+  rental_to: string;
+  pickup_point: string;
+  drop_point: string;
   created_at: string;
   car: Car;
   customer: UserSummary;

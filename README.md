@@ -19,4 +19,4 @@ Detailed run guide: see `RUNNING.md`.
 - Register as **CUSTOMER** or **OWNER**; sign in receives a JWT.
 - **KYC**: with `allow_self_kyc_verify: true` in your YAML (e.g. `config/dev.yaml`), use **Account → Mark KYC verified (demo)** after filling profile. Customers also need a **driving license** on the account before creating bookings.
 - **Owner**: My fleet → add car → upload images (requires Azure keys in YAML).
-- **Customer**: Search cars → **Booking inquiry** → shared **booking chat**; owner sets **final price** (`PATCH /api/bookings/:id/price`); customer **confirms**; Twilio SMS fires when Twilio fields are set in YAML.
+- **Customer**: Search cars → **Book** (rental dates, pickup & drop-off required) → optional **chat** to negotiate; owner sets **final price** (`PATCH /api/bookings/:id/price`) and **confirms**; customer may **withdraw** until a final price is set; Twilio SMS may notify the customer when Twilio is configured in YAML.
