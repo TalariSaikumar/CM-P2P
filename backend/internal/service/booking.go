@@ -137,6 +137,16 @@ func (s *BookingService) ListForOwner(ctx context.Context, ownerID uuid.UUID) ([
 	return s.Repo.ListBookingsForOwner(ctx, ownerID)
 }
 
+// ListForCustomerPaged returns bookings for the customer with total count.
+func (s *BookingService) ListForCustomerPaged(ctx context.Context, customerID uuid.UUID, offset, limit int) ([]models.Booking, int64, error) {
+	return s.Repo.ListBookingsForCustomerPaged(ctx, customerID, offset, limit)
+}
+
+// ListForOwnerPaged returns bookings for the owner with total count.
+func (s *BookingService) ListForOwnerPaged(ctx context.Context, ownerID uuid.UUID, offset, limit int) ([]models.Booking, int64, error) {
+	return s.Repo.ListBookingsForOwnerPaged(ctx, ownerID, offset, limit)
+}
+
 type PatchFinalPriceInput struct {
 	FinalBookingPrice string
 }

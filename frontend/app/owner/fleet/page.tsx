@@ -1,28 +1,42 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiForm, apiJson, ApiError } from "@/lib/api";
 import { getToken } from "@/lib/session";
 import type { Car } from "@/lib/apitypes";
+import { PaginationBar } from "@/components/PaginationBar";
+
+const PER_PAGE = 20;
 
 export default function OwnerFleetPage() {
   const router = useRouter();
   const [cars, setCars] = useState<Car[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  async function load() {
+  const load = useCallback(async () => {
     setError(null);
     try {
-      const res = await apiJson<{ cars: Car[] }>("/cars/mine");
+      const res = await apiJson<{ cars: Car[]; total?: number }>(
+        `/cars/mine?page=${page}&per_page=${PER_PAGE}`,
+      );
+      const t = res.total ?? res.cars?.length ?? 0;
+      setTotal(t);
+      const totalPages = Math.max(1, Math.ceil(t / PER_PAGE));
+      if (page > totalPages) {
+        setPage(totalPages);
+        return;
+      }
       setCars(res.cars || []);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load fleet");
     }
-  }
+  }, [page]);
 
   useEffect(() => {
     if (!getToken()) {
@@ -30,8 +44,7 @@ export default function OwnerFleetPage() {
       return;
     }
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [router, load]);
 
   async function upload(carId: string, file: File | null) {
     if (!file) return;
@@ -119,6 +132,7 @@ export default function OwnerFleetPage() {
           <p className="text-sm text-slate-600">No vehicles yet. Add your first listing.</p>
         )}
       </ul>
+      <PaginationBar page={page} perPage={PER_PAGE} total={total} onPageChange={setPage} noun="vehicles" />
     </main>
   );
 }

@@ -70,6 +70,38 @@ func (d *DB) ListBookingsForOwner(ctx context.Context, ownerID uuid.UUID) ([]mod
 	return rows, nil
 }
 
+// ListBookingsForCustomerPaged returns one page and total count for the customer.
+func (d *DB) ListBookingsForCustomerPaged(ctx context.Context, customerID uuid.UUID, offset, limit int) ([]models.Booking, int64, error) {
+	var total int64
+	if err := d.WithContext(ctx).Model(&models.Booking{}).Where("customer_id = ?", customerID).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []models.Booking
+	err := d.WithContext(ctx).Where("customer_id = ?", customerID).
+		Preload("Car").Preload("Car.Images").Preload("Owner").
+		Order("created_at desc").Offset(offset).Limit(limit).Find(&rows).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+// ListBookingsForOwnerPaged returns one page and total count for the owner.
+func (d *DB) ListBookingsForOwnerPaged(ctx context.Context, ownerID uuid.UUID, offset, limit int) ([]models.Booking, int64, error) {
+	var total int64
+	if err := d.WithContext(ctx).Model(&models.Booking{}).Where("owner_id = ?", ownerID).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var rows []models.Booking
+	err := d.WithContext(ctx).Where("owner_id = ?", ownerID).
+		Preload("Car").Preload("Car.Images").Preload("Customer").
+		Order("created_at desc").Offset(offset).Limit(limit).Find(&rows).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
 // UpdateBooking saves booking fields.
 func (d *DB) UpdateBooking(ctx context.Context, b *models.Booking) error {
 	return d.WithContext(ctx).Save(b).Error

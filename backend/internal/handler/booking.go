@@ -102,12 +102,14 @@ func (h *BookingHandler) Mine(c *gin.Context) {
 		return
 	}
 	role, _ := middleware.UserRole(c)
+	page, perPage, offset := parseListPagination(c)
 	var rows []models.Booking
+	var total int64
 	switch models.UserRole(role) {
 	case models.RoleCustomer:
-		rows, err = h.Svc.ListForCustomer(c.Request.Context(), uid)
+		rows, total, err = h.Svc.ListForCustomerPaged(c.Request.Context(), uid, offset, perPage)
 	case models.RoleOwner:
-		rows, err = h.Svc.ListForOwner(c.Request.Context(), uid)
+		rows, total, err = h.Svc.ListForOwnerPaged(c.Request.Context(), uid, offset, perPage)
 	default:
 		httpx.Abort(c, http.StatusForbidden, "FORBIDDEN", "This action is not available for your account type.")
 		return
@@ -120,7 +122,12 @@ func (h *BookingHandler) Mine(c *gin.Context) {
 	for i := range rows {
 		out = append(out, toBookingPublic(&rows[i]))
 	}
-	c.JSON(http.StatusOK, gin.H{"bookings": out})
+	c.JSON(http.StatusOK, gin.H{
+		"bookings": out,
+		"total":    total,
+		"page":     page,
+		"per_page": perPage,
+	})
 }
 
 func (h *BookingHandler) Get(c *gin.Context) {

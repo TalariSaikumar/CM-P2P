@@ -1,16 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiJson, ApiError } from "@/lib/api";
 import { getToken } from "@/lib/session";
 import type { Booking } from "@/lib/apitypes";
+import { PaginationBar } from "@/components/PaginationBar";
+
+const PER_PAGE = 20;
 
 export default function OwnerBookingsPage() {
   const router = useRouter();
   const [rows, setRows] = useState<Booking[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const res = await apiJson<{ bookings: Booking[]; total?: number }>(
+        `/bookings/mine?page=${page}&per_page=${PER_PAGE}`,
+      );
+      const t = res.total ?? res.bookings?.length ?? 0;
+      setTotal(t);
+      const totalPages = Math.max(1, Math.ceil(t / PER_PAGE));
+      if (page > totalPages) {
+        setPage(totalPages);
+        return;
+      }
+      setRows(res.bookings || []);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not load requests");
+    }
+  }, [page]);
 
   useEffect(() => {
     if (!getToken()) {
@@ -18,18 +42,7 @@ export default function OwnerBookingsPage() {
       return;
     }
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function load() {
-    setError(null);
-    try {
-      const res = await apiJson<{ bookings: Booking[] }>("/bookings/mine");
-      setRows(res.bookings || []);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Could not load requests");
-    }
-  }
+  }, [router, load]);
 
   return (
     <main className="page-shell max-w-3xl space-y-4">
@@ -64,6 +77,7 @@ export default function OwnerBookingsPage() {
           <p className="text-sm text-slate-600">No booking requests yet.</p>
         )}
       </ul>
+      <PaginationBar page={page} perPage={PER_PAGE} total={total} onPageChange={setPage} noun="bookings" />
     </main>
   );
 }

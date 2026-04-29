@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { apiJson, ApiError } from "@/lib/api";
 import { getToken, getUser } from "@/lib/session";
 import type { Car } from "@/lib/apitypes";
 import type { User } from "@/lib/session";
+import { PaginationBar } from "@/components/PaginationBar";
 
 function isOwnCar(user: User | null, car: Car): boolean {
   return !!user && user.id === car.owner_id;
@@ -19,13 +20,20 @@ function toEndOfDayUTC(dateStr: string): string {
   return `${dateStr}T23:59:59.999Z`;
 }
 
+const PER_PAGE = 20;
+
 export default function CustomerSearchPage() {
   const router = useRouter();
   const [location, setLocation] = useState("");
   const [model, setModel] = useState("");
   const [cars, setCars] = useState<Car[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  /** Bumped when the user clicks Search so we refetch even if already on page 1. */
+  const [searchNonce, setSearchNonce] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false);
 
   const [bookingCar, setBookingCar] = useState<Car | null>(null);
   const [rentalFrom, setRentalFrom] = useState("");
@@ -34,26 +42,37 @@ export default function CustomerSearchPage() {
   const [dropPoint, setDropPoint] = useState("");
   const [customerNote, setCustomerNote] = useState("");
 
-  async function search() {
-    setError(null);
-    setLoading(true);
-    try {
-      const qs = new URLSearchParams();
-      if (location.trim()) qs.set("location", location.trim());
-      if (model.trim()) qs.set("model", model.trim());
-      const res = await apiJson<{ cars: Car[] }>(`/cars?${qs.toString()}`);
-      setCars(res.cars || []);
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Search failed");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const loadPage = useCallback(
+    async (p: number) => {
+      setError(null);
+      setSearchLoading(true);
+      try {
+        const qs = new URLSearchParams();
+        if (location.trim()) qs.set("location", location.trim());
+        if (model.trim()) qs.set("model", model.trim());
+        qs.set("page", String(p));
+        qs.set("per_page", String(PER_PAGE));
+        const res = await apiJson<{ cars: Car[]; total?: number }>(`/cars?${qs.toString()}`);
+        const t = res.total ?? 0;
+        setTotal(t);
+        const totalPages = Math.max(1, Math.ceil(t / PER_PAGE));
+        if (p > totalPages) {
+          setPage(totalPages);
+          return;
+        }
+        setCars(res.cars || []);
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : "Search failed");
+      } finally {
+        setSearchLoading(false);
+      }
+    },
+    [location, model],
+  );
 
   useEffect(() => {
-    void search();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void loadPage(page);
+  }, [page, searchNonce, loadPage]);
 
   function openBookingModal(car: Car) {
     const token = getToken();
@@ -104,7 +123,7 @@ export default function CustomerSearchPage() {
       return;
     }
     setError(null);
-    setLoading(true);
+    setSubmitLoading(true);
     try {
       const res = await apiJson<{ booking: { id: string } }>("/bookings", {
         method: "POST",
@@ -126,7 +145,7 @@ export default function CustomerSearchPage() {
         setError(e instanceof ApiError ? e.message : "Could not create booking");
       }
     } finally {
-      setLoading(false);
+      setSubmitLoading(false);
     }
   }
 
@@ -154,11 +173,14 @@ export default function CustomerSearchPage() {
         />
         <button
           type="button"
-          onClick={() => void search()}
-          disabled={loading}
+          onClick={() => {
+            setPage(1);
+            setSearchNonce((n) => n + 1);
+          }}
+          disabled={searchLoading}
           className="min-h-[44px] w-full shrink-0 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60 sm:w-auto"
         >
-          {loading ? "Searching…" : "Search"}
+          {searchLoading ? "Searching…" : "Search"}
         </button>
       </div>
       {error && !bookingCar && (
@@ -204,10 +226,11 @@ export default function CustomerSearchPage() {
             </li>
           );
         })}
-        {!cars.length && !loading && (
+        {!cars.length && !searchLoading && (
           <p className="text-sm text-slate-600">No cars match your filters yet.</p>
         )}
       </ul>
+      <PaginationBar page={page} perPage={PER_PAGE} total={total} onPageChange={setPage} noun="cars" />
 
       {bookingCar && (
         <div
@@ -311,11 +334,11 @@ export default function CustomerSearchPage() {
               </button>
               <button
                 type="button"
-                disabled={loading}
+                disabled={submitLoading}
                 onClick={() => void submitBooking()}
                 className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60"
               >
-                {loading ? "Creating…" : "Create booking"}
+                {submitLoading ? "Creating…" : "Create booking"}
               </button>
             </div>
           </div>

@@ -48,7 +48,8 @@ type patchCarReq struct {
 func (h *CarHandler) Search(c *gin.Context) {
 	loc := c.Query("location")
 	model := c.Query("model")
-	cars, err := h.Repo.SearchCars(c.Request.Context(), loc, model)
+	page, perPage, offset := parseListPagination(c)
+	cars, total, err := h.Repo.SearchCarsPaged(c.Request.Context(), loc, model, offset, perPage)
 	if err != nil {
 		httpx.AbortUnexpected(c, err)
 		return
@@ -57,7 +58,12 @@ func (h *CarHandler) Search(c *gin.Context) {
 	for i := range cars {
 		out = append(out, toCarPublic(&cars[i]))
 	}
-	c.JSON(http.StatusOK, gin.H{"cars": out})
+	c.JSON(http.StatusOK, gin.H{
+		"cars":     out,
+		"total":    total,
+		"page":     page,
+		"per_page": perPage,
+	})
 }
 
 func (h *CarHandler) Get(c *gin.Context) {
@@ -126,7 +132,8 @@ func (h *CarHandler) Mine(c *gin.Context) {
 		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
 		return
 	}
-	cars, err := h.Repo.ListCarsForOwner(c.Request.Context(), uid)
+	page, perPage, offset := parseListPagination(c)
+	cars, total, err := h.Repo.ListCarsForOwnerPaged(c.Request.Context(), uid, offset, perPage)
 	if err != nil {
 		httpx.AbortUnexpected(c, err)
 		return
@@ -135,7 +142,12 @@ func (h *CarHandler) Mine(c *gin.Context) {
 	for i := range cars {
 		out = append(out, toCarPublic(&cars[i]))
 	}
-	c.JSON(http.StatusOK, gin.H{"cars": out})
+	c.JSON(http.StatusOK, gin.H{
+		"cars":     out,
+		"total":    total,
+		"page":     page,
+		"per_page": perPage,
+	})
 }
 
 func (h *CarHandler) Update(c *gin.Context) {
