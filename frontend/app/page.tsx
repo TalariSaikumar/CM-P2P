@@ -43,6 +43,8 @@ function IconCar(props: SVGProps<SVGSVGElement>) {
 }
 
 export default function Home() {
+  const supportEmail = process.env.NEXT_PUBLIC_SUPPORT_EMAIL?.trim();
+
   return (
     <div className="overflow-x-hidden">
       <section className="relative border-b border-emerald-900/30 bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-950 text-white">
@@ -220,17 +222,39 @@ export default function Home() {
       <footer className="border-t border-slate-200 bg-slate-50 px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl text-center text-xs text-slate-500">
           <p className="break-words">
-            Point the app at your API with{" "}
-            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">
-              NEXT_PUBLIC_API_URL
-            </code>{" "}
-            in{" "}
-            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">
-              frontend/.env.local
-            </code>{" "}
-            (default <code className="font-mono text-slate-700">http://localhost:8080/api</code>).
+            Set <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">APP_ENV</code> to{" "}
+            <code className="font-mono text-slate-700">dev</code>, <code className="font-mono text-slate-700">stag</code>
+            , or <code className="font-mono text-slate-700">prod</code> in{" "}
+            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">frontend/.env</code> or{" "}
+            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">.env.local</code>. API URL
+            and support email load from{" "}
+            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">frontend/config/</code>
+            <code className="font-mono text-slate-700">{"{APP_ENV}"}.yaml</code>. Override with{" "}
+            <code className="font-mono text-slate-700">NEXT_PUBLIC_*</code> in <code className="font-mono text-slate-700">.env.local</code> if needed.
           </p>
-          <p className="mt-2 text-slate-400">CarManage · P2P car rental</p>
+          <div className="mt-6 border-t border-slate-200 pt-6">
+            <p className="font-medium text-slate-800">Contact support</p>
+            {supportEmail ? (
+              <p className="mt-2 break-words text-slate-600">
+                Questions about bookings or your account?{" "}
+                <a
+                  href={`mailto:${supportEmail}?subject=CarManage%20support`}
+                  className="font-medium text-emerald-800 underline-offset-2 hover:text-emerald-900 hover:underline"
+                >
+                  {supportEmail}
+                </a>
+              </p>
+            ) : (
+              <p className="mt-2 text-slate-600">
+                Set <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">support_email</code> in{" "}
+                <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">frontend/config/</code>
+                <code className="font-mono text-slate-700">{"{APP_ENV}"}.yaml</code>, or{" "}
+                <code className="font-mono text-slate-700">NEXT_PUBLIC_SUPPORT_EMAIL</code> in{" "}
+                <code className="font-mono text-slate-700">.env.local</code>.
+              </p>
+            )}
+          </div>
+          <p className="mt-6 text-slate-400">CarManage · P2P car rental</p>
         </div>
       </footer>
     </div>

@@ -1,0 +1,4 @@
+# Production (APP_ENV=prod) — replace URLs with your production API host.
+
+api_url: https://api.example.com/api
+support_email: support@yourcompany.com

@@ -11,7 +11,7 @@ Detailed run guide: see `RUNNING.md`.
 
 ## Run the web app
 
-1. Copy `frontend/.env.example` to `frontend/.env.local` and set `NEXT_PUBLIC_API_URL` (default `http://localhost:8080/api`).
+1. The repo includes **`frontend/.env`** with **`APP_ENV=dev`**. Change **`APP_ENV`** there to `stag` or `prod` when needed, or add **`frontend/.env.local`** for machine-only overrides. API URL and support email default from **`frontend/config/{APP_ENV}.yaml`** (see `next.config.mjs`); you can still set **`NEXT_PUBLIC_*`** in `.env.local`.
 2. From the **repo root** or **`frontend/`**: `npm install` then `npm run dev` — opens on `http://localhost:3000` (CORS is allowed for this origin on the API). The root `package.json` wires scripts to the `frontend` workspace.
 
 ## Main flows

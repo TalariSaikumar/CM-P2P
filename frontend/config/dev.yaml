@@ -1,0 +1,5 @@
+# Local development (loaded when APP_ENV=dev in frontend/.env)
+# Values become NEXT_PUBLIC_* in the browser; do not put secrets here.
+
+api_url: http://localhost:8080/api
+support_email: support@yourcompany.com

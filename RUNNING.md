@@ -96,14 +96,10 @@ Requirements:
 You can run commands from the **repo root** (`CM-P2P/`) or from **`frontend/`** — the root `package.json` uses an npm **workspace** so `npm install` and `npm run dev` work from either place.
 
 1. Open a second terminal (repo root or `frontend/`).
-2. Copy env template:
-   - PowerShell: `Copy-Item .env.example .env.local`
-   - Bash: `cp .env.example .env.local`
-3. Ensure `frontend/.env.local` has:
-   - `NEXT_PUBLIC_API_URL=http://localhost:8080/api`
-4. Install dependencies (from repo root **or** `frontend/`):
+2. **`frontend/.env`** is committed with **`APP_ENV=dev`**. Edit **`APP_ENV`** there for `stag` / `prod`, or add **`frontend/.env.local`** for overrides. The app loads **`frontend/config/{APP_ENV}.yaml`** for `api_url` and `support_email` (wired to `NEXT_PUBLIC_*` in `next.config.mjs`).
+3. Install dependencies (from repo root **or** `frontend/`):
    - `npm install`
-5. Start dev server:
+4. Start dev server:
    - `npm run dev`
 
 **Windows (PowerShell):** If `npm` fails with `Cannot find module ... npm-prefix.js` / `Could not determine Node.js install directory`, your `PATH` is picking the wrong npm shim. Either fix `PATH` (remove `C:\Program Files\nodejs\node_modules\npm\bin`, keep `C:\Program Files\nodejs\` first—see earlier notes), or use the bundled scripts from `frontend`:

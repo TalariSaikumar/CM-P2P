@@ -1,0 +1,4 @@
+# Staging (APP_ENV=stag) — replace URLs with your staging API host.
+
+api_url: https://staging-api.example.com/api
+support_email: support-staging@yourcompany.com

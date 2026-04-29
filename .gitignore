@@ -1,5 +1,6 @@
-# Environment
+# Environment (frontend ships a committed default `.env`; use `.env.local` for overrides/secrets)
 .env
+!frontend/.env
 .env.local
 .env.*.local
 
