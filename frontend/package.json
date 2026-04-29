@@ -2,10 +2,11 @@
   "name": "carmanage-frontend",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "node ./scripts/run-next.cjs dev",
+    "dev:gitbash": "bash ./scripts/dev.sh",
+    "build": "node ./scripts/run-next.cjs build",
+    "start": "node ./scripts/run-next.cjs start",
+    "lint": "node ./scripts/run-next.cjs lint"
   },
   "dependencies": {
     "next": "14.2.18",

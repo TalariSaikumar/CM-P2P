@@ -183,15 +183,28 @@ export default function BookingChatPage() {
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="font-medium">Chat</h2>
-        <div className="mt-3 max-h-80 space-y-2 overflow-y-auto rounded-md bg-slate-50 p-3 text-sm">
-          {messages.map((m) => (
-            <div key={m.id} className="rounded-md bg-white px-3 py-2 shadow-sm">
-              <p className="text-xs text-slate-500">
-                {m.sender.full_name} · {new Date(m.created_at).toLocaleString()}
-              </p>
-              <p className="text-slate-900">{m.body}</p>
-            </div>
-          ))}
+        <div className="mt-3 max-h-80 space-y-3 overflow-y-auto rounded-md bg-slate-50 p-3 text-sm">
+          {messages.map((m) => {
+            const isMine = me?.id === m.sender_id;
+            return (
+              <div key={m.id} className={`flex w-full ${isMine ? "justify-end" : "justify-start"}`}>
+                <div
+                  className={`max-w-[min(85%,20rem)] rounded-2xl px-3 py-2 shadow-sm ${
+                    isMine
+                      ? "rounded-br-md bg-slate-900 text-white"
+                      : "rounded-bl-md border border-slate-200 bg-white text-slate-900"
+                  }`}
+                >
+                  <p className={`text-xs ${isMine ? "text-slate-400" : "text-slate-500"}`}>
+                    {isMine ? "You" : m.sender.full_name} · {new Date(m.created_at).toLocaleString()}
+                  </p>
+                  <p className={`mt-0.5 whitespace-pre-wrap break-words ${isMine ? "text-white" : "text-slate-900"}`}>
+                    {m.body}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
           {!messages.length && <p className="text-slate-500">No messages yet. Say hello.</p>}
         </div>
         <div className="mt-3 flex gap-2">

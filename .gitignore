@@ -10,7 +10,8 @@ backend/bin/
 *.out
 vendor/
 
-# Node / Next.js
+# Node / Next.js (workspace may hoist to repo root)
+node_modules/
 frontend/node_modules/
 frontend/.next/
 frontend/out/

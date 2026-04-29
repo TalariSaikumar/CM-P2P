@@ -12,7 +12,7 @@ Detailed run guide: see `RUNNING.md`.
 ## Run the web app
 
 1. Copy `frontend/.env.example` to `frontend/.env.local` and set `NEXT_PUBLIC_API_URL` (default `http://localhost:8080/api`).
-2. From `frontend/`: `npm install` then `npm run dev` — opens on `http://localhost:3000` (CORS is allowed for this origin on the API).
+2. From the **repo root** or **`frontend/`**: `npm install` then `npm run dev` — opens on `http://localhost:3000` (CORS is allowed for this origin on the API). The root `package.json` wires scripts to the `frontend` workspace.
 
 ## Main flows
 

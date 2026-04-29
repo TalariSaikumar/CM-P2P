@@ -62,7 +62,7 @@ export default function AccountPage() {
       phone_number: String(fd.get("phone_number") || ""),
       address: String(fd.get("address") || ""),
     };
-    if (user.role === "CUSTOMER") {
+    if (user?.role === "CUSTOMER") {
       const dl = String(fd.get("driving_license_number") || "").trim();
       body.driving_license_number = dl.length ? dl : null;
     }

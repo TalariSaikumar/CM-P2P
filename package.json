@@ -1,0 +1,15 @@
+{
+  "name": "cm-p2p",
+  "private": true,
+  "description": "P2P car rental monorepo — run npm scripts from the repo root or from frontend/",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w frontend",
+    "dev:gitbash": "npm run dev:gitbash -w frontend",
+    "build": "npm run build -w frontend",
+    "lint": "npm run lint -w frontend",
+    "start": "npm run start -w frontend"
+  }
+}

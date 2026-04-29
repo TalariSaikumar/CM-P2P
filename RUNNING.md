@@ -93,16 +93,34 @@ Requirements:
 
 ## 2) Run the frontend web app
 
-1. Open a second terminal in `frontend`.
+You can run commands from the **repo root** (`CM-P2P/`) or from **`frontend/`** — the root `package.json` uses an npm **workspace** so `npm install` and `npm run dev` work from either place.
+
+1. Open a second terminal (repo root or `frontend/`).
 2. Copy env template:
    - PowerShell: `Copy-Item .env.example .env.local`
    - Bash: `cp .env.example .env.local`
 3. Ensure `frontend/.env.local` has:
    - `NEXT_PUBLIC_API_URL=http://localhost:8080/api`
-4. Install dependencies:
+4. Install dependencies (from repo root **or** `frontend/`):
    - `npm install`
 5. Start dev server:
    - `npm run dev`
+
+**Windows (PowerShell):** If `npm` fails with `Cannot find module ... npm-prefix.js` / `Could not determine Node.js install directory`, your `PATH` is picking the wrong npm shim. Either fix `PATH` (remove `C:\Program Files\nodejs\node_modules\npm\bin`, keep `C:\Program Files\nodejs\` first—see earlier notes), or use the bundled scripts from `frontend`:
+
+- `.\scripts\install.ps1`
+- `.\scripts\dev.ps1`
+
+Or call npm directly: `& "$env:ProgramFiles\nodejs\npm.cmd" install` and `& "$env:ProgramFiles\nodejs\npm.cmd" run dev`.
+
+If PowerShell blocks scripts, use **cmd**: `frontend\scripts\install.cmd` then `frontend\scripts\dev.cmd`.
+
+**Git Bash (Windows)** — the default `dev` script runs **`node ./scripts/run-next.cjs dev`**, which resolves `next` from the hoisted workspace `node_modules` and avoids **`next.cmd`** (that path often yields **`'node' is not recognized`** under `cmd.exe`). If it still fails, use either:
+
+- From `frontend`: `npm run dev:gitbash` (runs `scripts/dev.sh` with a direct path to `node.exe`), or  
+- `bash ./scripts/dev.sh`
+
+Long-term fix: add **`C:\Program Files\nodejs`** to your **Windows** user or system **PATH** (Settings → System → About → Advanced system settings → Environment Variables), then reopen the terminal. Optionally in `~/.bashrc`: `export PATH="/c/Program Files/nodejs:$PATH"` so Bash and child tools agree.
 
 Expected result:
 
@@ -124,4 +142,6 @@ Terminal 1 (backend):
 
 Terminal 2 (frontend):
 
-`cd frontend && npm install && npm run dev`
+From repo root: `npm install && npm run dev` — or from `frontend/`: `npm install && npm run dev`.
+
+On Windows if `npm` is broken in PowerShell, use `frontend\scripts\install.cmd` and `frontend\scripts\dev.cmd`, or `npm run dev:gitbash` from root / `frontend` (Git Bash).
