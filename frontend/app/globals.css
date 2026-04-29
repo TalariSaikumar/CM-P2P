@@ -1,3 +1,17 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+}
+
+@layer components {
+  /* Shared horizontal padding and max width for app pages (phones → laptops). */
+  .page-shell {
+    @apply mx-auto w-full px-4 py-6 sm:px-6 sm:py-8 lg:px-8;
+  }
+}

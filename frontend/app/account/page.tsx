@@ -85,16 +85,16 @@ export default function AccountPage() {
 
   if (!user) {
     return (
-      <main className="p-8">
+      <main className="page-shell max-w-lg">
         <p className="text-slate-600">Loading…</p>
       </main>
     );
   }
 
   return (
-    <main className="mx-auto max-w-lg space-y-6 p-8">
+    <main className="page-shell max-w-lg space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Account</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">Account</h1>
         <p className="text-sm text-slate-600">
           KYC status:{" "}
           <span className="font-medium text-slate-900">

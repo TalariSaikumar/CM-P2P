@@ -54,8 +54,8 @@ export default function NewCarPage() {
     "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500";
 
   return (
-    <main className="mx-auto max-w-lg p-8">
-      <h1 className="text-2xl font-semibold">List a vehicle</h1>
+    <main className="page-shell max-w-lg">
+      <h1 className="text-xl font-semibold sm:text-2xl">List a vehicle</h1>
       <p className="mt-1 text-sm text-slate-600">Owners must be KYC verified before listings are accepted.</p>
       <form onSubmit={onSubmit} className="mt-6 space-y-3">
         {error && (

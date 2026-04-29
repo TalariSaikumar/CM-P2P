@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DM_Sans } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
@@ -14,6 +14,12 @@ export const metadata: Metadata = {
   description: "P2P car rental",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -21,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={dmSans.variable}>
-      <body className="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased">
+      <body className="min-h-screen min-h-[100dvh] overflow-x-hidden bg-slate-50 font-sans text-slate-900 antialiased">
         <Nav />
         {children}
       </body>

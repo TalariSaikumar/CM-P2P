@@ -102,7 +102,7 @@ export default function BookingChatPage() {
 
   if (!booking) {
     return (
-      <main className="p-8">
+      <main className="page-shell max-w-3xl">
         <p className="text-slate-600">Loading booking…</p>
         {bootError && (
           <p className="mt-3 text-sm text-red-700">
@@ -118,10 +118,10 @@ export default function BookingChatPage() {
   const isCustomer = me?.id === booking.customer_id;
 
   return (
-    <main className="mx-auto max-w-3xl space-y-4 p-8">
+    <main className="page-shell max-w-3xl space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold">Booking</h1>
-        <p className="text-sm text-slate-600">
+        <h1 className="text-xl font-semibold sm:text-2xl">Booking</h1>
+        <p className="text-sm break-words text-slate-600">
           {booking.car.car_name} · {booking.car.car_model} ({booking.car.car_number}) ·{" "}
           <span className="font-medium text-slate-900">{booking.status}</span>
         </p>
@@ -146,9 +146,9 @@ export default function BookingChatPage() {
         <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="font-medium">Update final price</h2>
           <p className="text-sm text-slate-600">Only you can set the agreed amount the customer will confirm.</p>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <input
-              className="min-w-[160px] flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+              className="min-h-[44px] min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm sm:min-w-[160px]"
               placeholder="Amount in INR"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
@@ -156,7 +156,7 @@ export default function BookingChatPage() {
             <button
               type="button"
               onClick={() => void updatePrice()}
-              className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
+              className="min-h-[44px] shrink-0 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 sm:min-h-0"
             >
               Save price
             </button>
@@ -174,7 +174,7 @@ export default function BookingChatPage() {
             type="button"
             disabled={!booking.final_booking_price}
             onClick={() => void confirm()}
-            className="mt-3 rounded-md bg-emerald-700 px-4 py-2 text-sm text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-3 min-h-[44px] w-full rounded-md bg-emerald-700 px-4 py-2 text-sm text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-h-0"
           >
             Confirm booking
           </button>
@@ -183,7 +183,7 @@ export default function BookingChatPage() {
 
       <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
         <h2 className="font-medium">Chat</h2>
-        <div className="mt-3 max-h-80 space-y-3 overflow-y-auto rounded-md bg-slate-50 p-3 text-sm">
+        <div className="mt-3 max-h-[min(22rem,55dvh)] space-y-3 overflow-y-auto rounded-md bg-slate-50 p-3 text-sm sm:max-h-80">
           {messages.map((m) => {
             const isMine = me?.id === m.sender_id;
             return (
@@ -207,9 +207,9 @@ export default function BookingChatPage() {
           })}
           {!messages.length && <p className="text-slate-500">No messages yet. Say hello.</p>}
         </div>
-        <div className="mt-3 flex gap-2">
+        <div className="mt-3 flex min-w-0 gap-2">
           <input
-            className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+            className="min-h-[44px] min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
             placeholder="Type a message"
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -223,7 +223,7 @@ export default function BookingChatPage() {
           <button
             type="button"
             onClick={() => void sendMessage()}
-            className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
+            className="min-h-[44px] shrink-0 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
           >
             Send
           </button>

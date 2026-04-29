@@ -139,7 +139,7 @@ export default function Home() {
             Two sides, one platform
           </h2>
           <div className="mt-12 grid gap-8 lg:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-8">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-5 sm:p-8">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-slate-900 text-emerald-400">
                 <IconCar className="h-6 w-6" />
               </div>
@@ -155,7 +155,7 @@ export default function Home() {
                 Register as owner →
               </Link>
             </div>
-            <div className="rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 to-white p-8 ring-1 ring-emerald-100">
+            <div className="rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 to-white p-5 ring-1 ring-emerald-100 sm:p-8">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-emerald-600 text-white">
                 <IconSearch className="h-6 w-6" />
               </div>
@@ -217,9 +217,9 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="border-t border-slate-200 bg-slate-50 px-4 py-8 sm:px-6 lg:px-8">
+      <footer className="border-t border-slate-200 bg-slate-50 px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl text-center text-xs text-slate-500">
-          <p>
+          <p className="break-words">
             Point the app at your API with{" "}
             <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">
               NEXT_PUBLIC_API_URL

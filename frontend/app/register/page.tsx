@@ -56,8 +56,8 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="mx-auto max-w-lg p-8">
-      <h1 className="text-2xl font-semibold">Create account</h1>
+    <main className="page-shell max-w-lg">
+      <h1 className="text-xl font-semibold sm:text-2xl">Create account</h1>
       <p className="mt-1 text-sm text-slate-600">
         Already registered?{" "}
         <Link href="/login" className="text-slate-900 underline">

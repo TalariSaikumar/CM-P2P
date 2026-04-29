@@ -70,21 +70,21 @@ export default function CustomerSearchPage() {
   }
 
   return (
-    <main className="mx-auto max-w-4xl space-y-6 p-8">
+    <main className="page-shell max-w-4xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Search cars</h1>
+        <h1 className="text-xl font-semibold sm:text-2xl">Search cars</h1>
         <p className="text-sm text-slate-600">Filter by location and model, then send a booking inquiry.</p>
       </div>
-      <div className="flex flex-wrap gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
         <input
           placeholder="Location (city or area)"
-          className="min-w-[200px] flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+          className="min-h-[44px] min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm sm:min-w-[140px]"
           value={location}
           onChange={(e) => setLocation(e.target.value)}
         />
         <input
           placeholder="Model keyword"
-          className="min-w-[160px] flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm"
+          className="min-h-[44px] min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm sm:min-w-[120px]"
           value={model}
           onChange={(e) => setModel(e.target.value)}
         />
@@ -92,7 +92,7 @@ export default function CustomerSearchPage() {
           type="button"
           onClick={() => void search()}
           disabled={loading}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60"
+          className="min-h-[44px] w-full shrink-0 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60 sm:w-auto"
         >
           {loading ? "Searching…" : "Search"}
         </button>
@@ -117,11 +117,11 @@ export default function CustomerSearchPage() {
                 From ₹{c.price_per_day}/day · ₹{c.price_per_hour}/hr · ₹{c.price_per_km}/km
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex w-full shrink-0 sm:w-auto">
               <button
                 type="button"
                 onClick={() => void inquire(c.id)}
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50"
+                className="min-h-[44px] w-full rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-50 sm:min-h-0 sm:w-auto sm:py-1.5"
               >
                 Booking inquiry
               </button>

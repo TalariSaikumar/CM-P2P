@@ -32,17 +32,17 @@ export default function CustomerBookingsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl space-y-4 p-8">
-      <h1 className="text-2xl font-semibold">My bookings</h1>
+    <main className="page-shell max-w-3xl space-y-4">
+      <h1 className="text-xl font-semibold sm:text-2xl">My bookings</h1>
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</div>
       )}
       <ul className="space-y-3">
         {rows.map((b) => (
           <li key={b.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <p className="font-medium">
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="font-medium break-words">
                   {b.car.car_name} · {b.car.car_model} ({b.car.car_number})
                 </p>
                 <p className="text-sm text-slate-600">
@@ -53,7 +53,7 @@ export default function CustomerBookingsPage() {
                 </p>
               </div>
               <Link
-                className="rounded-md bg-slate-900 px-3 py-1.5 text-sm text-white hover:bg-slate-800"
+                className="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center rounded-md bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-800 sm:w-auto sm:py-1.5"
                 href={`/bookings/${b.id}`}
               >
                 Open chat
