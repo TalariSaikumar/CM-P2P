@@ -1,0 +1,19 @@
+# Compose reads ".env" here for ${VAR} substitution, or use:
+#   docker compose --env-file compose.env up --build
+#
+# APP_ENV (compose.env / .env) must match APP_ENV in backend/.env — it selects which
+# backend/config/{APP_ENV}.yaml is baked into the image at build time.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_ENV: ${APP_ENV:-stag}
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    env_file:
+      - ${BACKEND_ENV_PATH:-./backend/.env}
+    volumes:
+      - ${BACKEND_ENV_PATH:-./backend/.env}:/app/.env:ro
+      - ${BACKEND_CONFIG_DIR:-./backend/config}:/app/config:ro

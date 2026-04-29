@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -20,9 +21,28 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func main() {
+// resolveBackendRoot finds the directory that contains .env and config/ (module root).
+// Order: BACKEND_ROOT env → directory of binary if .env exists there (Docker) → source dir (go run).
+func resolveBackendRoot() string {
+	if d := strings.TrimSpace(os.Getenv("BACKEND_ROOT")); d != "" {
+		return d
+	}
+	if exe, err := os.Executable(); err == nil {
+		exePath := exe
+		if r, err := filepath.EvalSymlinks(exe); err == nil {
+			exePath = r
+		}
+		dir := filepath.Dir(exePath)
+		if _, err := os.Stat(filepath.Join(dir, ".env")); err == nil {
+			return dir
+		}
+	}
 	_, file, _, _ := runtime.Caller(0)
-	backendRoot := filepath.Dir(file)
+	return filepath.Dir(file)
+}
+
+func main() {
+	backendRoot := resolveBackendRoot()
 
 	cfg, err := config.Load(backendRoot)
 	if err != nil {
