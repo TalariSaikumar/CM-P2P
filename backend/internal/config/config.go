@@ -40,6 +40,12 @@ type Config struct {
 
 	AllowSelfKycVerify bool
 	JWTTTLHours        int
+
+	// Platform commission as percent of agreed rental (charged to customer on top of base; deducted from owner payout).
+	CustomerCommissionPercent float64
+	OwnerCommissionPercent    float64
+	// GST percent on customer subtotal (agreed rental + customer platform fee) and on owner agreed rental; see booking payment math.
+	GstPercentOnCommission float64
 }
 
 type yamlFile struct {
@@ -64,6 +70,12 @@ type yamlFile struct {
 		AuthToken  string `yaml:"auth_token"`
 		FromNumber string `yaml:"from_number"`
 	} `yaml:"twilio"`
+
+	Payments struct {
+		CustomerCommissionPercent float64 `yaml:"customer_commission_percent"`
+		OwnerCommissionPercent    float64 `yaml:"owner_commission_percent"`
+		GstPercentOnCommission    float64 `yaml:"gst_percent_on_commission"`
+	} `yaml:"payments"`
 }
 
 // Load reads backend/.env for APP_ENV only, then loads backend/config/<APP_ENV>.yaml.
@@ -133,6 +145,26 @@ func Load(backendRoot string) (*Config, error) {
 		jwtHours = 720
 	}
 
+	custComm := y.Payments.CustomerCommissionPercent
+	ownerComm := y.Payments.OwnerCommissionPercent
+	if custComm < 0 {
+		custComm = 0
+	}
+	if ownerComm < 0 {
+		ownerComm = 0
+	}
+	if custComm == 0 && ownerComm == 0 {
+		custComm, ownerComm = 2, 1.5
+	}
+
+	gstOnComm := y.Payments.GstPercentOnCommission
+	if gstOnComm < 0 {
+		gstOnComm = 0
+	}
+	if gstOnComm == 0 {
+		gstOnComm = 18
+	}
+
 	// Optional env overrides (backend/.env) so secrets are not committed in YAML.
 	if v := strings.TrimSpace(os.Getenv("DATABASE_URL")); v != "" {
 		dbURL = v
@@ -154,19 +186,22 @@ func Load(backendRoot string) (*Config, error) {
 	}
 
 	return &Config{
-		Environment:           rawEnv,
-		HTTPPort:              port,
-		GinMode:               ginMode,
-		DatabaseURL:           dbURL,
-		JWTSecret:             jwt,
-		AzureStorageAccount:   azureAccount,
-		AzureStorageKey:       azureKey,
-		AzureStorageContainer: azureContainer,
-		TwilioAccountSID:      strings.TrimSpace(y.Twilio.AccountSID),
-		TwilioAuthToken:       strings.TrimSpace(y.Twilio.AuthToken),
-		TwilioFromNumber:      strings.TrimSpace(y.Twilio.FromNumber),
-		AllowSelfKycVerify:    selfKyc,
-		JWTTTLHours:           jwtHours,
+		Environment:               rawEnv,
+		HTTPPort:                  port,
+		GinMode:                   ginMode,
+		DatabaseURL:               dbURL,
+		JWTSecret:                 jwt,
+		AzureStorageAccount:       azureAccount,
+		AzureStorageKey:           azureKey,
+		AzureStorageContainer:     azureContainer,
+		TwilioAccountSID:          strings.TrimSpace(y.Twilio.AccountSID),
+		TwilioAuthToken:           strings.TrimSpace(y.Twilio.AuthToken),
+		TwilioFromNumber:          strings.TrimSpace(y.Twilio.FromNumber),
+		AllowSelfKycVerify:        selfKyc,
+		JWTTTLHours:               jwtHours,
+		CustomerCommissionPercent: custComm,
+		OwnerCommissionPercent:    ownerComm,
+		GstPercentOnCommission:    gstOnComm,
 	}, nil
 }
 

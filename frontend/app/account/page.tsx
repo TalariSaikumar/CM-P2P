@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiJson, ApiError } from "@/lib/api";
 import { getToken, getUser, setSession, type User } from "@/lib/session";
+import { ButtonCarSpinner, PageLoader } from "@/components/loaders";
 
 type MeResponse = { user: User };
 
@@ -12,7 +13,9 @@ export default function AccountPage() {
   const [user, setUser] = useState<User | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [kycSubmitting, setKycSubmitting] = useState(false);
+  const formBusy = savingProfile || kycSubmitting;
 
   useEffect(() => {
     if (!getToken()) {
@@ -38,7 +41,7 @@ export default function AccountPage() {
   async function completeKyc() {
     setErr(null);
     setMsg(null);
-    setLoading(true);
+    setKycSubmitting(true);
     try {
       const res = await apiJson<MeResponse>("/me/complete-kyc", { method: "POST" });
       setUser(res.user);
@@ -48,7 +51,7 @@ export default function AccountPage() {
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Could not complete verification");
     } finally {
-      setLoading(false);
+      setKycSubmitting(false);
     }
   }
 
@@ -66,7 +69,7 @@ export default function AccountPage() {
       const dl = String(fd.get("driving_license_number") || "").trim();
       body.driving_license_number = dl.length ? dl : null;
     }
-    setLoading(true);
+    setSavingProfile(true);
     try {
       const res = await apiJson<MeResponse>("/me", {
         method: "PUT",
@@ -79,14 +82,14 @@ export default function AccountPage() {
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : "Update failed");
     } finally {
-      setLoading(false);
+      setSavingProfile(false);
     }
   }
 
   if (!user) {
     return (
       <main className="page-shell max-w-lg">
-        <p className="text-slate-600">Loading…</p>
+        <PageLoader title="Loading your account…" subtitle="Profile, KYC, and driving license." className="min-h-[240px] py-6" />
       </main>
     );
   }
@@ -151,10 +154,17 @@ export default function AccountPage() {
         )}
         <button
           type="submit"
-          disabled={loading}
-          className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60"
+          disabled={formBusy}
+          className="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60"
         >
-          Save changes
+          {savingProfile ? (
+            <>
+              <ButtonCarSpinner className="text-emerald-200" />
+              Saving…
+            </>
+          ) : (
+            "Save changes"
+          )}
         </button>
       </form>
 
@@ -167,11 +177,18 @@ export default function AccountPage() {
           </p>
           <button
             type="button"
-            disabled={loading}
+            disabled={formBusy}
             onClick={completeKyc}
-            className="mt-3 rounded-md bg-amber-900 px-3 py-1.5 text-white hover:bg-amber-800 disabled:opacity-60"
+            className="mt-3 inline-flex items-center justify-center gap-2 rounded-md bg-amber-900 px-3 py-1.5 text-white hover:bg-amber-800 disabled:opacity-60"
           >
-            Mark KYC verified (demo)
+            {kycSubmitting ? (
+              <>
+                <ButtonCarSpinner className="text-amber-100" />
+                Verifying…
+              </>
+            ) : (
+              "Mark KYC verified (demo)"
+            )}
           </button>
         </div>
       )}

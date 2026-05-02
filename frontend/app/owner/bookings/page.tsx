@@ -7,6 +7,7 @@ import { apiJson, ApiError } from "@/lib/api";
 import { getToken } from "@/lib/session";
 import type { Booking } from "@/lib/apitypes";
 import { PaginationBar } from "@/components/PaginationBar";
+import { CarRoadLoader, PageLoader } from "@/components/loaders";
 
 const PER_PAGE = 20;
 
@@ -16,8 +17,10 @@ export default function OwnerBookingsPage() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [listBusy, setListBusy] = useState(true);
 
   const load = useCallback(async () => {
+    setListBusy(true);
     setError(null);
     try {
       const res = await apiJson<{ bookings: Booking[]; total?: number }>(
@@ -33,6 +36,8 @@ export default function OwnerBookingsPage() {
       setRows(res.bookings || []);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not load requests");
+    } finally {
+      setListBusy(false);
     }
   }, [page]);
 
@@ -51,6 +56,16 @@ export default function OwnerBookingsPage() {
       {error && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</div>
       )}
+      {listBusy && rows.length > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-sm">
+          <CarRoadLoader size="sm" className="!w-14" />
+          <span>Updating requests…</span>
+        </div>
+      )}
+      {listBusy && rows.length === 0 ? (
+        <PageLoader title="Loading booking requests…" subtitle="Customer threads and agreed prices." className="min-h-[280px] py-8" />
+      ) : null}
+      {!listBusy || rows.length > 0 ? (
       <ul className="space-y-3">
         {rows.map((b) => (
           <li key={b.id} className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -73,11 +88,14 @@ export default function OwnerBookingsPage() {
             </div>
           </li>
         ))}
-        {!rows.length && !error && (
+        {!rows.length && !error && !listBusy && (
           <p className="text-sm text-slate-600">No booking requests yet.</p>
         )}
       </ul>
-      <PaginationBar page={page} perPage={PER_PAGE} total={total} onPageChange={setPage} noun="bookings" />
+      ) : null}
+      {!(listBusy && rows.length === 0) && (
+        <PaginationBar page={page} perPage={PER_PAGE} total={total} onPageChange={setPage} noun="bookings" />
+      )}
     </main>
   );
 }

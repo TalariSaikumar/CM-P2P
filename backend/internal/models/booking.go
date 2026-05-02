@@ -18,13 +18,19 @@ const (
 	BookingCancelled   BookingStatus = "CANCELLED"
 )
 
+// Booking payment lifecycle (simulated gateway — amounts stored on confirm + pay).
+const (
+	BookingPaymentUnpaid = "UNPAID"
+	BookingPaymentPaid   = "PAID"
+)
+
 // Booking ties a customer inquiry to a car; owner sets FinalBookingPrice via PATCH.
 type Booking struct {
 	ID uuid.UUID `gorm:"type:uuid;primaryKey"`
 
-	CarID       uuid.UUID `gorm:"type:uuid;not null;index"`
-	CustomerID  uuid.UUID `gorm:"type:uuid;not null;index"`
-	OwnerID     uuid.UUID `gorm:"type:uuid;not null;index"`
+	CarID      uuid.UUID `gorm:"type:uuid;not null;index"`
+	CustomerID uuid.UUID `gorm:"type:uuid;not null;index"`
+	OwnerID    uuid.UUID `gorm:"type:uuid;not null;index"`
 
 	Status BookingStatus `gorm:"type:varchar(24);not null;default:PENDING;index"`
 
@@ -41,6 +47,20 @@ type Booking struct {
 	PickupPoint string    `gorm:"type:text;not null;default:''"`
 	DropPoint   string    `gorm:"type:text;not null;default:''"`
 
+	PaymentStatus            string           `gorm:"size:16;not null;default:UNPAID;index"`
+	PaymentMethod            string           `gorm:"size:24"`
+	PaidAt                   *time.Time       `gorm:"type:timestamptz"`
+	CustomerCommissionRate   *decimal.Decimal `gorm:"type:numeric(6,3)"`
+	OwnerCommissionRate      *decimal.Decimal `gorm:"type:numeric(6,3)"`
+	CustomerCommissionAmount *decimal.Decimal `gorm:"type:numeric(14,2)"`
+	OwnerCommissionAmount    *decimal.Decimal `gorm:"type:numeric(14,2)"`
+	CustomerTotalPaid        *decimal.Decimal `gorm:"type:numeric(14,2)"`
+	OwnerNetPayout           *decimal.Decimal `gorm:"type:numeric(14,2)"`
+
+	GstPercentOnCommission *decimal.Decimal `gorm:"type:numeric(5,2)"`
+	CustomerGSTAmount      *decimal.Decimal `gorm:"type:numeric(14,2)"`
+	OwnerGSTAmount         *decimal.Decimal `gorm:"type:numeric(14,2)"`
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt `gorm:"index"`
@@ -54,6 +74,9 @@ type Booking struct {
 func (b *Booking) BeforeCreate(tx *gorm.DB) error {
 	if b.ID == uuid.Nil {
 		b.ID = uuid.New()
+	}
+	if b.PaymentStatus == "" {
+		b.PaymentStatus = BookingPaymentUnpaid
 	}
 	return nil
 }

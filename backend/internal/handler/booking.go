@@ -87,7 +87,7 @@ func (h *BookingHandler) Create(c *gin.Context) {
 		httpx.AbortUnexpected(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"booking": toBookingPublic(b)})
+	c.JSON(http.StatusCreated, gin.H{"booking": toBookingPublic(b, h.Svc)})
 }
 
 func (h *BookingHandler) Mine(c *gin.Context) {
@@ -120,7 +120,7 @@ func (h *BookingHandler) Mine(c *gin.Context) {
 	}
 	out := make([]bookingPublic, 0, len(rows))
 	for i := range rows {
-		out = append(out, toBookingPublic(&rows[i]))
+		out = append(out, toBookingPublic(&rows[i], h.Svc))
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"bookings": out,
@@ -154,7 +154,7 @@ func (h *BookingHandler) Get(c *gin.Context) {
 		httpx.AbortUnexpected(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b)})
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
 }
 
 func (h *BookingHandler) PatchPrice(c *gin.Context) {
@@ -188,7 +188,7 @@ func (h *BookingHandler) PatchPrice(c *gin.Context) {
 		httpx.AbortUnexpected(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b)})
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
 }
 
 func (h *BookingHandler) Confirm(c *gin.Context) {
@@ -215,7 +215,7 @@ func (h *BookingHandler) Confirm(c *gin.Context) {
 		httpx.AbortUnexpected(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b)})
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
 }
 
 func (h *BookingHandler) PatchTrip(c *gin.Context) {
@@ -262,7 +262,7 @@ func (h *BookingHandler) PatchTrip(c *gin.Context) {
 		httpx.AbortUnexpected(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b)})
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
 }
 
 func (h *BookingHandler) Withdraw(c *gin.Context) {
@@ -289,7 +289,7 @@ func (h *BookingHandler) Withdraw(c *gin.Context) {
 		httpx.AbortUnexpected(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b)})
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
 }
 
 func (h *BookingHandler) ListMessages(c *gin.Context) {
@@ -353,4 +353,75 @@ func (h *BookingHandler) PostMessage(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusCreated, gin.H{"message": toMessagePublic(m)})
+}
+
+type payBookingReq struct {
+	PaymentMethod string `json:"payment_method" binding:"required"`
+}
+
+func (h *BookingHandler) PaymentPreview(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	bd, err := h.Svc.CustomerPaymentPreview(c.Request.Context(), uid, bid)
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	b, err := h.Svc.Get(c.Request.Context(), uid, bid)
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"breakdown": bookingPaymentFromBreakdown(b, bd)})
+}
+
+func (h *BookingHandler) Pay(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	var req payBookingReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Please check your input and try again.")
+		return
+	}
+	b, err := h.Svc.CustomerRecordPayment(c.Request.Context(), uid, bid, req.PaymentMethod)
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
 }

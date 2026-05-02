@@ -18,3 +18,8 @@ twilio:
   account_sid: ""
   auth_token: ""
   from_number: ""
+
+payments:
+  customer_commission_percent: 2
+  owner_commission_percent: 1.5
+  gst_percent_on_commission: 18

@@ -56,6 +56,7 @@ func RegisterWithDeps(r *gin.RouterGroup, d Deps) {
 		{
 			ownerCars.POST("/cars", carH.Create)
 			ownerCars.GET("/cars/mine", carH.Mine)
+			ownerCars.GET("/cars/:id/edit", carH.GetForOwner)
 			ownerCars.PATCH("/cars/:id", carH.Update)
 			ownerCars.DELETE("/cars/:id", carH.Delete)
 			ownerCars.POST("/cars/:id/images", carH.UploadImage)
@@ -68,6 +69,8 @@ func RegisterWithDeps(r *gin.RouterGroup, d Deps) {
 			custBook.POST("/bookings", bookH.Create)
 			custBook.PATCH("/bookings/:id/trip", bookH.PatchTrip)
 			custBook.POST("/bookings/:id/withdraw", bookH.Withdraw)
+			custBook.GET("/bookings/:id/payment-preview", bookH.PaymentPreview)
+			custBook.POST("/bookings/:id/pay", bookH.Pay)
 		}
 
 		au.GET("/bookings/mine", bookH.Mine)

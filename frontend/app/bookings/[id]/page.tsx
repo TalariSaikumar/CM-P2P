@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { apiJson, ApiError } from "@/lib/api";
 import { getToken, getUser } from "@/lib/session";
 import type { Booking, Message } from "@/lib/apitypes";
+import { PageLoader } from "@/components/loaders";
 
 export default function BookingChatPage() {
   const params = useParams<{ id: string }>();
@@ -17,6 +19,8 @@ export default function BookingChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [bootError, setBootError] = useState<string | null>(null);
+  /** First booking GET finished (success or error); avoids infinite “loading” on failed load. */
+  const [bookingInitDone, setBookingInitDone] = useState(false);
 
   const [tripFrom, setTripFrom] = useState("");
   const [tripTo, setTripTo] = useState("");
@@ -35,6 +39,8 @@ export default function BookingChatPage() {
       if (e instanceof ApiError) {
         setBootError((prev) => prev ?? e.message);
       }
+    } finally {
+      setBookingInitDone(true);
     }
   }, [id]);
 
@@ -49,10 +55,14 @@ export default function BookingChatPage() {
   }, [id]);
 
   useEffect(() => {
+    setBookingInitDone(false);
+    setBooking(null);
+    setBootError(null);
     if (!getToken()) {
       router.replace("/login");
       return;
     }
+    if (!id) return;
     void loadBooking();
     void loadMessages();
     const t = setInterval(() => {
@@ -60,7 +70,7 @@ export default function BookingChatPage() {
       void loadMessages();
     }, 2000);
     return () => clearInterval(t);
-  }, [router, loadBooking, loadMessages]);
+  }, [router, id, loadBooking, loadMessages]);
 
   useEffect(() => {
     setTripEditorUserOpen(false);
@@ -185,15 +195,24 @@ export default function BookingChatPage() {
     }
   }
 
-  if (!booking) {
+  if (!bookingInitDone) {
     return (
       <main className="page-shell w-full max-w-7xl">
-        <p className="text-slate-600">Loading booking…</p>
-        {bootError && (
-          <p className="mt-3 text-sm text-red-700">
-            {bootError} — check that you are signed in and allowed to view this booking.
-          </p>
-        )}
+        <PageLoader title="Loading booking…" subtitle="Trip details, agreed price, and chat." />
+      </main>
+    );
+  }
+
+  if (!booking) {
+    return (
+      <main className="page-shell w-full max-w-7xl space-y-4">
+        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {bootError ??
+            "We could not load this booking. Check that you are signed in and allowed to open this thread."}
+        </div>
+        <Link href="/customer/search" className="text-sm font-medium text-emerald-800 hover:text-emerald-900">
+          ← Search cars
+        </Link>
       </main>
     );
   }
@@ -234,6 +253,51 @@ export default function BookingChatPage() {
               <p className="text-sm text-slate-700">
                 Final agreed price: <span className="font-semibold">₹{booking.final_booking_price}</span>
               </p>
+            )}
+            {isCustomer && booking.status === "CONFIRMED" && booking.payment?.payment_status === "UNPAID" && (
+              <p className="mt-2">
+                <Link
+                  href={`/customer/bookings/${booking.id}/pay`}
+                  className="inline-flex min-h-[44px] items-center rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+                >
+                  Pay ₹{booking.payment.customer_total_inr}
+                </Link>
+              </p>
+            )}
+            {isOwner && booking.status === "CONFIRMED" && booking.payment && (
+              <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                <p className="font-medium text-slate-900">Your payout</p>
+                <ul className="mt-2 space-y-2">
+                  <li className="flex justify-between gap-4">
+                    <span>Negotiated price (rental)</span>
+                    <span className="shrink-0 font-medium tabular-nums text-slate-900">
+                      ₹{booking.payment.agreed_base_inr}
+                    </span>
+                  </li>
+                  <li className="flex justify-between gap-4">
+                    <span>Platform fee ({booking.payment.owner_commission_percent}%)</span>
+                    <span className="shrink-0 tabular-nums text-slate-800">
+                      − ₹{booking.payment.owner_commission_inr}
+                    </span>
+                  </li>
+                  <li className="flex justify-between gap-4">
+                    <span>GST ({booking.payment.gst_percent_on_commission}% on negotiated rental)</span>
+                    <span className="shrink-0 tabular-nums text-slate-800">
+                      − ₹{booking.payment.owner_gst_inr}
+                    </span>
+                  </li>
+                  <li className="flex justify-between gap-4 border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
+                    <span>Total you get</span>
+                    <span className="shrink-0 tabular-nums text-emerald-900">₹{booking.payment.owner_net_inr}</span>
+                  </li>
+                </ul>
+                {booking.payment.payment_status === "PAID" && (
+                  <p className="mt-2 text-xs text-slate-600">
+                    Customer has completed payment
+                    {booking.payment.payment_method ? ` (${booking.payment.payment_method})` : ""}.
+                  </p>
+                )}
+              </div>
             )}
             <p className="text-xs text-slate-500">This page refreshes booking and chat every 2 seconds.</p>
             {showTripEditor ? (

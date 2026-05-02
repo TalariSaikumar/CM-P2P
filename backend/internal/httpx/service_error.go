@@ -32,6 +32,10 @@ var (
 	ErrKYCRequired      = NewError(http.StatusForbidden, "KYC_REQUIRED", "Complete identity verification before using this feature.")
 	ErrDrivingLicense   = NewError(http.StatusForbidden, "DRIVING_LICENSE_REQUIRED", "Add your verified driving license number to your profile before booking.")
 	ErrCarAlreadyBooked = NewError(http.StatusConflict, "CAR_ALREADY_BOOKED", "Already booked for this period. Try different dates or another vehicle.")
+	ErrCarBookedToday   = NewError(http.StatusConflict, "CAR_BOOKED_TODAY", "This vehicle is booked for today’s date (UTC). Details cannot be changed until that rental window no longer includes today.")
+	ErrPaymentNotReady  = NewError(http.StatusBadRequest, "PAYMENT_NOT_READY", "Payment is available only after the owner confirms the booking and an agreed price is set.")
+	ErrPaymentAlreadyPaid = NewError(http.StatusConflict, "ALREADY_PAID", "This booking is already marked as paid.")
+	ErrInvalidPaymentMethod = NewError(http.StatusBadRequest, "INVALID_PAYMENT_METHOD", "Choose a valid payment method: UPI, CARD, NET_BANKING, or WALLET.")
 )
 
 // WrapValidation returns a validation error with a specific message.

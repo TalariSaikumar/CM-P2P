@@ -399,3 +399,153 @@ func (s *BookingService) PostMessage(ctx context.Context, senderID, bookingID uu
 	}
 	return m, nil
 }
+
+func (s *BookingService) commissionRates() (customerPct, ownerPct, gstOnCommissionPct float64) {
+	if s.Config == nil {
+		return 2, 1.5, 18
+	}
+	c := s.Config.CustomerCommissionPercent
+	o := s.Config.OwnerCommissionPercent
+	g := s.Config.GstPercentOnCommission
+	if c < 0 {
+		c = 0
+	}
+	if o < 0 {
+		o = 0
+	}
+	if g < 0 {
+		g = 0
+	}
+	if g == 0 {
+		g = 18
+	}
+	return c, o, g
+}
+
+// BreakdownForBooking returns commission math for the agreed price (uses stored amounts when already paid).
+func (s *BookingService) BreakdownForBooking(b *models.Booking) (PaymentBreakdown, error) {
+	if b.FinalBookingPrice == nil {
+		return PaymentBreakdown{}, httpx.WrapValidation("Agreed price is not set.")
+	}
+	base := *b.FinalBookingPrice
+
+	if b.PaymentStatus == models.BookingPaymentPaid &&
+		b.CustomerCommissionRate != nil && b.OwnerCommissionRate != nil &&
+		b.CustomerCommissionAmount != nil && b.OwnerCommissionAmount != nil &&
+		b.CustomerTotalPaid != nil && b.OwnerNetPayout != nil {
+		cPct, _ := b.CustomerCommissionRate.Float64()
+		oPct, _ := b.OwnerCommissionRate.Float64()
+		gstPct := 0.0
+		if b.GstPercentOnCommission != nil {
+			gstPct, _ = b.GstPercentOnCommission.Float64()
+		}
+		cgst := decimal.Zero
+		if b.CustomerGSTAmount != nil {
+			cgst = *b.CustomerGSTAmount
+		}
+		ogst := decimal.Zero
+		if b.OwnerGSTAmount != nil {
+			ogst = *b.OwnerGSTAmount
+		}
+		platform := b.CustomerCommissionAmount.Add(*b.OwnerCommissionAmount).Add(cgst).Add(ogst).Round(2)
+		return PaymentBreakdown{
+			AgreedBase:               base,
+			CustomerCommissionPct:    cPct,
+			OwnerCommissionPct:       oPct,
+			GstPercentOnCommission:   gstPct,
+			CustomerCommissionAmount: *b.CustomerCommissionAmount,
+			OwnerCommissionAmount:    *b.OwnerCommissionAmount,
+			CustomerGSTAmount:        cgst,
+			OwnerGSTAmount:           ogst,
+			CustomerTotal:            *b.CustomerTotalPaid,
+			OwnerNet:                 *b.OwnerNetPayout,
+			PlatformTotal:            platform,
+		}, nil
+	}
+
+	c, o, g := s.commissionRates()
+	return BuildPaymentBreakdown(base, c, o, g), nil
+}
+
+// CustomerPaymentPreview returns the INR breakdown for a confirmed booking (customer only).
+func (s *BookingService) CustomerPaymentPreview(ctx context.Context, customerID, bookingID uuid.UUID) (PaymentBreakdown, error) {
+	b, err := s.Repo.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return PaymentBreakdown{}, httpx.ErrNotFound
+		}
+		return PaymentBreakdown{}, err
+	}
+	if b.CustomerID != customerID {
+		return PaymentBreakdown{}, httpx.ErrForbidden
+	}
+	if b.Status != models.BookingConfirmed {
+		return PaymentBreakdown{}, httpx.ErrPaymentNotReady
+	}
+	if b.FinalBookingPrice == nil {
+		return PaymentBreakdown{}, httpx.ErrPaymentNotReady
+	}
+	return s.BreakdownForBooking(b)
+}
+
+// CustomerRecordPayment simulates a successful payment and stores commission breakdown on the booking.
+func (s *BookingService) CustomerRecordPayment(ctx context.Context, customerID, bookingID uuid.UUID, methodRaw string) (*models.Booking, error) {
+	method := NormalizePaymentMethod(methodRaw)
+	if method == "" {
+		return nil, httpx.ErrInvalidPaymentMethod
+	}
+
+	b, err := s.Repo.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, httpx.ErrNotFound
+		}
+		return nil, err
+	}
+	if b.CustomerID != customerID {
+		return nil, httpx.ErrForbidden
+	}
+	if b.Status != models.BookingConfirmed {
+		return nil, httpx.ErrPaymentNotReady
+	}
+	if b.FinalBookingPrice == nil {
+		return nil, httpx.ErrPaymentNotReady
+	}
+	if b.PaymentStatus == models.BookingPaymentPaid {
+		return s.Repo.GetBookingByID(ctx, bookingID)
+	}
+
+	bd, err := s.BreakdownForBooking(b)
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC()
+	cr := decimal.NewFromFloat(bd.CustomerCommissionPct).Round(3)
+	or := decimal.NewFromFloat(bd.OwnerCommissionPct).Round(3)
+	cc := bd.CustomerCommissionAmount
+	oc := bd.OwnerCommissionAmount
+	cgst := bd.CustomerGSTAmount
+	ogst := bd.OwnerGSTAmount
+	ct := bd.CustomerTotal
+	on := bd.OwnerNet
+	gstPctDec := decimal.NewFromFloat(bd.GstPercentOnCommission).Round(2)
+
+	b.PaymentStatus = models.BookingPaymentPaid
+	b.PaymentMethod = method
+	b.PaidAt = &now
+	b.CustomerCommissionRate = &cr
+	b.OwnerCommissionRate = &or
+	b.CustomerCommissionAmount = &cc
+	b.OwnerCommissionAmount = &oc
+	b.CustomerGSTAmount = &cgst
+	b.OwnerGSTAmount = &ogst
+	b.GstPercentOnCommission = &gstPctDec
+	b.CustomerTotalPaid = &ct
+	b.OwnerNetPayout = &on
+
+	if err := s.Repo.UpdateBooking(ctx, b); err != nil {
+		return nil, err
+	}
+	return s.Repo.GetBookingByID(ctx, bookingID)
+}

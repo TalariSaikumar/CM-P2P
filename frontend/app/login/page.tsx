@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiJson, ApiError } from "@/lib/api";
 import { setSession, type User } from "@/lib/session";
+import { ButtonCarSpinner } from "@/components/loaders";
 
 type LoginResponse = { token: string; user: User };
 
@@ -75,9 +76,16 @@ export default function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full rounded-md bg-slate-900 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
         >
-          {loading ? "Signing in…" : "Sign in"}
+          {loading ? (
+            <>
+              <ButtonCarSpinner className="text-emerald-200" />
+              Signing in…
+            </>
+          ) : (
+            "Sign in"
+          )}
         </button>
       </form>
     </main>

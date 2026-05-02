@@ -7,6 +7,7 @@ import { getToken, getUser } from "@/lib/session";
 import type { Car } from "@/lib/apitypes";
 import type { User } from "@/lib/session";
 import { PaginationBar } from "@/components/PaginationBar";
+import { ButtonCarSpinner, SearchResultsSkeleton } from "@/components/loaders";
 
 function isOwnCar(user: User | null, car: Car): boolean {
   return !!user && user.id === car.owner_id;
@@ -32,7 +33,7 @@ export default function CustomerSearchPage() {
   /** Bumped when the user clicks Search so we refetch even if already on page 1. */
   const [searchNonce, setSearchNonce] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(true);
   const [submitLoading, setSubmitLoading] = useState(false);
 
   const [bookingCar, setBookingCar] = useState<Car | null>(null);
@@ -178,14 +179,24 @@ export default function CustomerSearchPage() {
             setSearchNonce((n) => n + 1);
           }}
           disabled={searchLoading}
-          className="min-h-[44px] w-full shrink-0 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60 sm:w-auto"
+          className="inline-flex min-h-[44px] w-full shrink-0 items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60 sm:w-auto"
         >
-          {searchLoading ? "Searching…" : "Search"}
+          {searchLoading ? (
+            <>
+              <ButtonCarSpinner className="text-emerald-200" />
+              Searching…
+            </>
+          ) : (
+            "Search"
+          )}
         </button>
       </div>
       {error && !bookingCar && (
         <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{error}</div>
       )}
+      {searchLoading ? (
+        <SearchResultsSkeleton rows={5} />
+      ) : (
       <ul className="space-y-3">
         {cars.map((c) => {
           const own = isOwnCar(getUser(), c);
@@ -197,6 +208,9 @@ export default function CustomerSearchPage() {
               <div>
                 <p className="font-medium text-slate-900">
                   {c.car_name} · {c.car_model}
+                </p>
+                <p className="text-sm text-slate-600">
+                  {c.model_year} · {c.color} · {c.fuel_type} · {c.transmission} · {c.num_seats} seats
                 </p>
                 <p className="text-sm text-slate-600">
                   {c.location} · Plate {c.car_number}
@@ -226,10 +240,11 @@ export default function CustomerSearchPage() {
             </li>
           );
         })}
-        {!cars.length && !searchLoading && (
+        {!cars.length && (
           <p className="text-sm text-slate-600">No cars match your filters yet.</p>
         )}
       </ul>
+      )}
       <PaginationBar page={page} perPage={PER_PAGE} total={total} onPageChange={setPage} noun="cars" />
 
       {bookingCar && (
@@ -336,9 +351,16 @@ export default function CustomerSearchPage() {
                 type="button"
                 disabled={submitLoading}
                 onClick={() => void submitBooking()}
-                className="rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-60"
               >
-                {submitLoading ? "Creating…" : "Create booking"}
+                {submitLoading ? (
+                  <>
+                    <ButtonCarSpinner className="text-emerald-200" />
+                    Creating…
+                  </>
+                ) : (
+                  "Create booking"
+                )}
               </button>
             </div>
           </div>

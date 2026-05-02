@@ -34,6 +34,25 @@ func (d *DB) HasCarBookingDateOverlap(ctx context.Context, carID uuid.UUID, from
 	return n > 0, nil
 }
 
+// ListCarIDsWithActiveBookingsOverlapping returns distinct car_ids that have at least one
+// PENDING, NEGOTIATING, or CONFIRMED booking overlapping [from, to) (same rule as HasCarBookingDateOverlap).
+func (d *DB) ListCarIDsWithActiveBookingsOverlapping(ctx context.Context, carIDs []uuid.UUID, from, to time.Time) ([]uuid.UUID, error) {
+	if len(carIDs) == 0 {
+		return nil, nil
+	}
+	var ids []uuid.UUID
+	err := d.WithContext(ctx).Model(&models.Booking{}).
+		Where("car_id IN ?", carIDs).
+		Where("status IN ?", activeBookingStatuses).
+		Where("rental_from < ? AND rental_to > ?", to.UTC(), from.UTC()).
+		Distinct("car_id").
+		Pluck("car_id", &ids).Error
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
 // CreateBooking persists a booking.
 func (d *DB) CreateBooking(ctx context.Context, b *models.Booking) error {
 	return d.WithContext(ctx).Create(b).Error
