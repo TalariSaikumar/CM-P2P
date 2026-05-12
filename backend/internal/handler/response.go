@@ -159,6 +159,11 @@ func toCarPublic(c *models.Car) carPublic {
 	return out
 }
 
+type bookingPostTripItemPublic struct {
+	Label     string `json:"label"`
+	AmountInr string `json:"amount_inr"`
+}
+
 type bookingPaymentPublic struct {
 	PaymentStatus              string  `json:"payment_status"`
 	PaymentMethod              string  `json:"payment_method,omitempty"`
@@ -174,25 +179,87 @@ type bookingPaymentPublic struct {
 	CustomerTotalInr           string  `json:"customer_total_inr"`
 	OwnerNetInr                string  `json:"owner_net_inr"`
 	PlatformCommissionTotalInr string  `json:"platform_commission_total_inr"`
+	PaymentPhase               string                      `json:"payment_phase,omitempty"`
+	DepositPercent             int                         `json:"deposit_percent,omitempty"`
+	DepositDueInr              string                      `json:"deposit_due_inr,omitempty"`
+	DepositPaidInr             string                      `json:"deposit_paid_inr,omitempty"`
+	DepositPaidAt              *string                     `json:"deposit_paid_at,omitempty"`
+	TripBalanceInr             string                      `json:"trip_balance_inr,omitempty"`
+	PostTripChargesInr         string                      `json:"post_trip_charges_inr,omitempty"`
+	FinalDueInr                string                      `json:"final_due_inr,omitempty"`
+	OwnerProjectedPayoutInr    string                      `json:"owner_projected_payout_inr,omitempty"`
+	PostTripItems              []bookingPostTripItemPublic `json:"post_trip_items,omitempty"`
+}
+
+type bookingCancellationPublic struct {
+	Reason          string `json:"reason"`
+	CancelledAt     string `json:"cancelled_at"`
+	CancelledByRole string `json:"cancelled_by_role"`
+}
+
+type bookingHandoverPublic struct {
+	PickupOdometerKm  *int    `json:"pickup_odometer_km,omitempty"`
+	PickupFuelPercent *int    `json:"pickup_fuel_percent,omitempty"`
+	PickupNotes       string  `json:"pickup_notes,omitempty"`
+	PickupRecordedAt  *string `json:"pickup_recorded_at,omitempty"`
+	ReturnOdometerKm  *int    `json:"return_odometer_km,omitempty"`
+	ReturnFuelPercent *int    `json:"return_fuel_percent,omitempty"`
+	ReturnNotes       string  `json:"return_notes,omitempty"`
+	ReturnRecordedAt  *string `json:"return_recorded_at,omitempty"`
+}
+
+type bookingReviewPublic struct {
+	Party     string      `json:"party"`
+	Rating    int         `json:"rating"`
+	Comment   string      `json:"comment"`
+	Reviewer  userSummary `json:"reviewer"`
+	CreatedAt string      `json:"created_at"`
+}
+
+func ptrRFC3339(t *time.Time) *string {
+	if t == nil {
+		return nil
+	}
+	s := t.UTC().Format(time.RFC3339)
+	return &s
+}
+
+func handoverFromBooking(b *models.Booking) *bookingHandoverPublic {
+	if b.PickupHandoverAt == nil && b.ReturnHandoverAt == nil {
+		return nil
+	}
+	return &bookingHandoverPublic{
+		PickupOdometerKm:  b.PickupOdometerKM,
+		PickupFuelPercent: b.PickupFuelPercent,
+		PickupNotes:       b.PickupHandoverNotes,
+		PickupRecordedAt:  ptrRFC3339(b.PickupHandoverAt),
+		ReturnOdometerKm:  b.ReturnOdometerKM,
+		ReturnFuelPercent: b.ReturnFuelPercent,
+		ReturnNotes:       b.ReturnHandoverNotes,
+		ReturnRecordedAt:  ptrRFC3339(b.ReturnHandoverAt),
+	}
 }
 
 type bookingPublic struct {
-	ID                string                `json:"id"`
-	CarID             string                `json:"car_id"`
-	CustomerID        string                `json:"customer_id"`
-	OwnerID           string                `json:"owner_id"`
-	Status            string                `json:"status"`
-	FinalBookingPrice *string               `json:"final_booking_price,omitempty"`
-	CustomerNote      string                `json:"customer_note,omitempty"`
-	RentalFrom        string                `json:"rental_from"`
-	RentalTo          string                `json:"rental_to"`
-	PickupPoint       string                `json:"pickup_point"`
-	DropPoint         string                `json:"drop_point"`
-	CreatedAt         string                `json:"created_at"`
-	Car               carPublic             `json:"car"`
-	Customer          userSummary           `json:"customer"`
-	Owner             userSummary           `json:"owner"`
-	Payment           *bookingPaymentPublic `json:"payment,omitempty"`
+	ID                string                 `json:"id"`
+	CarID             string                 `json:"car_id"`
+	CustomerID        string                 `json:"customer_id"`
+	OwnerID           string                 `json:"owner_id"`
+	Status            string                 `json:"status"`
+	FinalBookingPrice *string                `json:"final_booking_price,omitempty"`
+	CustomerNote      string                 `json:"customer_note,omitempty"`
+	RentalFrom        string                 `json:"rental_from"`
+	RentalTo          string                 `json:"rental_to"`
+	PickupPoint       string                 `json:"pickup_point"`
+	DropPoint         string                 `json:"drop_point"`
+	CreatedAt         string                 `json:"created_at"`
+	Car               carPublic              `json:"car"`
+	Customer          userSummary            `json:"customer"`
+	Owner             userSummary            `json:"owner"`
+	Payment           *bookingPaymentPublic  `json:"payment,omitempty"`
+	Cancellation      *bookingCancellationPublic `json:"cancellation,omitempty"`
+	Handover          *bookingHandoverPublic     `json:"handover,omitempty"`
+	Reviews           []bookingReviewPublic      `json:"reviews,omitempty"`
 }
 
 func ptrDec(d *decimal.Decimal) *string {
@@ -203,9 +270,9 @@ func ptrDec(d *decimal.Decimal) *string {
 	return &s
 }
 
-func bookingPaymentFromBreakdown(b *models.Booking, bd service.PaymentBreakdown) *bookingPaymentPublic {
+func bookingPaymentFromBreakdown(b *models.Booking, bd service.PaymentBreakdown, sv service.PaymentSettlementView) *bookingPaymentPublic {
 	var paidAt *string
-	if b.PaidAt != nil {
+	if b.PaidAt != nil && b.PaymentStatus == models.BookingPaymentPaid {
 		s := b.PaidAt.UTC().Format(time.RFC3339)
 		paidAt = &s
 	}
@@ -213,7 +280,7 @@ func bookingPaymentFromBreakdown(b *models.Booking, bd service.PaymentBreakdown)
 	if ps == "" {
 		ps = models.BookingPaymentUnpaid
 	}
-	return &bookingPaymentPublic{
+	out := &bookingPaymentPublic{
 		PaymentStatus:              ps,
 		PaymentMethod:              b.PaymentMethod,
 		PaidAt:                     paidAt,
@@ -228,7 +295,27 @@ func bookingPaymentFromBreakdown(b *models.Booking, bd service.PaymentBreakdown)
 		CustomerTotalInr:           bd.CustomerTotal.StringFixed(2),
 		OwnerNetInr:                bd.OwnerNet.StringFixed(2),
 		PlatformCommissionTotalInr: bd.PlatformTotal.StringFixed(2),
+		PaymentPhase:               sv.Phase,
+		DepositPercent:             sv.DepositPercent,
+		DepositDueInr:              sv.DepositDueInr.StringFixed(2),
+		DepositPaidInr:             sv.DepositPaidInr.StringFixed(2),
+		DepositPaidAt:              ptrRFC3339(b.DepositPaidAt),
+		TripBalanceInr:             sv.TripBalanceInr.StringFixed(2),
+		PostTripChargesInr:         sv.PostTripChargesInr.StringFixed(2),
+		FinalDueInr:                sv.FinalDueInr.StringFixed(2),
+		OwnerProjectedPayoutInr:    sv.OwnerProjectedPayoutInr.StringFixed(2),
 	}
+	if len(b.PostTripCharges) > 0 {
+		out.PostTripItems = make([]bookingPostTripItemPublic, 0, len(b.PostTripCharges))
+		for i := range b.PostTripCharges {
+			c := b.PostTripCharges[i]
+			out.PostTripItems = append(out.PostTripItems, bookingPostTripItemPublic{
+				Label:     c.Label,
+				AmountInr: c.AmountInr.StringFixed(2),
+			})
+		}
+	}
+	return out
 }
 
 func toBookingPublic(b *models.Booking, svc *service.BookingService) bookingPublic {
@@ -251,7 +338,35 @@ func toBookingPublic(b *models.Booking, svc *service.BookingService) bookingPubl
 	}
 	if svc != nil && b.Status == models.BookingConfirmed && b.FinalBookingPrice != nil {
 		if bd, err := svc.BreakdownForBooking(b); err == nil {
-			bp.Payment = bookingPaymentFromBreakdown(b, bd)
+			sv := svc.SettlementView(b, bd)
+			bp.Payment = bookingPaymentFromBreakdown(b, bd, sv)
+		}
+	}
+	if b.Status == models.BookingCancelled && b.CancelledAt != nil {
+		role := "owner"
+		if b.CancelledByUserID != nil && *b.CancelledByUserID == b.CustomerID {
+			role = "customer"
+		}
+		bp.Cancellation = &bookingCancellationPublic{
+			Reason:          b.CancellationReason,
+			CancelledAt:     b.CancelledAt.UTC().Format(time.RFC3339),
+			CancelledByRole: role,
+		}
+	}
+	if h := handoverFromBooking(b); h != nil {
+		bp.Handover = h
+	}
+	if len(b.Reviews) > 0 {
+		bp.Reviews = make([]bookingReviewPublic, 0, len(b.Reviews))
+		for i := range b.Reviews {
+			r := b.Reviews[i]
+			bp.Reviews = append(bp.Reviews, bookingReviewPublic{
+				Party:     r.ReviewerParty,
+				Rating:    r.Rating,
+				Comment:   r.Comment,
+				Reviewer:  toUserSummary(&r.Reviewer),
+				CreatedAt: r.CreatedAt.UTC().Format(time.RFC3339),
+			})
 		}
 	}
 	return bp

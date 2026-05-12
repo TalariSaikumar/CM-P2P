@@ -34,6 +34,8 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Car{},
 		&models.CarImage{},
 		&models.Booking{},
+		&models.BookingPostTripCharge{},
+		&models.BookingReview{},
 		&models.Message{},
 	)
 }

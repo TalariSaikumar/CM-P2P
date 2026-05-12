@@ -36,6 +36,15 @@ var (
 	ErrPaymentNotReady  = NewError(http.StatusBadRequest, "PAYMENT_NOT_READY", "Payment is available only after the owner confirms the booking and an agreed price is set.")
 	ErrPaymentAlreadyPaid = NewError(http.StatusConflict, "ALREADY_PAID", "This booking is already marked as paid.")
 	ErrInvalidPaymentMethod = NewError(http.StatusBadRequest, "INVALID_PAYMENT_METHOD", "Choose a valid payment method: UPI, CARD, NET_BANKING, or WALLET.")
+	ErrBookingPaidNoCancel  = NewError(http.StatusConflict, "BOOKING_PAID", "Bookings with a deposit or full payment cannot be cancelled in the app. Contact support if you need to change or refund a trip.")
+	ErrReviewExists           = NewError(http.StatusConflict, "REVIEW_EXISTS", "You have already submitted a review for this booking.")
+	ErrHandoverExists         = NewError(http.StatusConflict, "HANDOVER_EXISTS", "That pickup or return handover was already recorded.")
+	ErrBookingTermsNotAck     = NewError(http.StatusBadRequest, "BOOKING_TERMS", "You must acknowledge the deposit and post-trip billing terms before creating a booking.")
+	ErrSettlementNotReady     = NewError(http.StatusBadRequest, "SETTLEMENT_NOT_READY", "The owner has not yet submitted post-trip charges. You can pay the final balance only after they do.")
+	ErrSettlementTooEarly     = NewError(http.StatusBadRequest, "SETTLEMENT_TOO_EARLY", "Post-trip charges can be submitted only after the rental end time and once return handover is recorded.")
+	ErrDepositRequiredForSettlement = NewError(http.StatusBadRequest, "DEPOSIT_REQUIRED", "The customer must pay the trip deposit before you can submit post-trip charges.")
+	ErrSettlementLockedPaid   = NewError(http.StatusConflict, "SETTLEMENT_LOCKED", "This booking is already fully paid; post-trip charges cannot be changed.")
+	ErrReturnHandoverRequired   = NewError(http.StatusBadRequest, "RETURN_HANDOVER_REQUIRED", "Record return handover before submitting post-trip charges.")
 )
 
 // WrapValidation returns a validation error with a specific message.

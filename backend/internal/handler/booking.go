@@ -18,12 +18,13 @@ type BookingHandler struct {
 }
 
 type createBookingReq struct {
-	CarID        string `json:"car_id" binding:"required,uuid"`
-	CustomerNote string `json:"customer_note"`
-	RentalFrom   string `json:"rental_from" binding:"required"`
-	RentalTo     string `json:"rental_to" binding:"required"`
-	PickupPoint  string `json:"pickup_point"`
-	DropPoint    string `json:"drop_point"`
+	CarID                      string `json:"car_id" binding:"required,uuid"`
+	CustomerNote               string `json:"customer_note"`
+	RentalFrom                 string `json:"rental_from" binding:"required"`
+	RentalTo                   string `json:"rental_to" binding:"required"`
+	PickupPoint                string `json:"pickup_point"`
+	DropPoint                  string `json:"drop_point"`
+	AcknowledgedDepositTerms   bool   `json:"acknowledged_deposit_terms"`
 }
 
 type patchPriceReq struct {
@@ -39,6 +40,22 @@ type patchTripReq struct {
 
 type postMessageReq struct {
 	Body string `json:"body" binding:"required"`
+}
+
+type cancelBookingReq struct {
+	Reason string `json:"reason"`
+}
+
+type patchHandoverReq struct {
+	Phase       string `json:"phase" binding:"required"`
+	OdometerKM  int    `json:"odometer_km" binding:"required"`
+	FuelPercent *int   `json:"fuel_percent"`
+	Notes       string `json:"notes"`
+}
+
+type postReviewReq struct {
+	Rating  int    `json:"rating" binding:"required,min=1,max=5"`
+	Comment string `json:"comment"`
 }
 
 func (h *BookingHandler) Create(c *gin.Context) {
@@ -73,12 +90,13 @@ func (h *BookingHandler) Create(c *gin.Context) {
 		return
 	}
 	b, err := h.Svc.Create(c.Request.Context(), uid, service.CreateBookingInput{
-		CarID:        carID,
-		CustomerNote: req.CustomerNote,
-		RentalFrom:   from,
-		RentalTo:     to,
-		PickupPoint:  req.PickupPoint,
-		DropPoint:    req.DropPoint,
+		CarID:                     carID,
+		CustomerNote:              req.CustomerNote,
+		RentalFrom:                from,
+		RentalTo:                  to,
+		PickupPoint:               req.PickupPoint,
+		DropPoint:                 req.DropPoint,
+		AcknowledgedDepositTerms:  req.AcknowledgedDepositTerms,
 	})
 	if err != nil {
 		if httpx.AbortService(c, err) {
@@ -355,6 +373,111 @@ func (h *BookingHandler) PostMessage(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"message": toMessagePublic(m)})
 }
 
+func (h *BookingHandler) Cancel(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	var req cancelBookingReq
+	_ = c.ShouldBindJSON(&req)
+	b, err := h.Svc.CancelBooking(c.Request.Context(), uid, bid, req.Reason)
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
+}
+
+func (h *BookingHandler) PatchHandover(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	var req patchHandoverReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Please check your input and try again.")
+		return
+	}
+	b, err := h.Svc.PatchHandover(c.Request.Context(), uid, bid, service.PatchHandoverInput{
+		Phase:       req.Phase,
+		OdometerKM:  req.OdometerKM,
+		FuelPercent: req.FuelPercent,
+		Notes:       req.Notes,
+	})
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
+}
+
+func (h *BookingHandler) PostReview(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	var req postReviewReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Please check your input and try again.")
+		return
+	}
+	if _, err := h.Svc.SubmitReview(c.Request.Context(), uid, bid, req.Rating, req.Comment); err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	b, err := h.Svc.Get(c.Request.Context(), uid, bid)
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{"booking": toBookingPublic(b, h.Svc)})
+}
+
 type payBookingReq struct {
 	PaymentMethod string `json:"payment_method" binding:"required"`
 }
@@ -375,7 +498,7 @@ func (h *BookingHandler) PaymentPreview(c *gin.Context) {
 		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
 		return
 	}
-	bd, err := h.Svc.CustomerPaymentPreview(c.Request.Context(), uid, bid)
+	b, bd, err := h.Svc.CustomerPaymentPreview(c.Request.Context(), uid, bid)
 	if err != nil {
 		if httpx.AbortService(c, err) {
 			return
@@ -383,7 +506,35 @@ func (h *BookingHandler) PaymentPreview(c *gin.Context) {
 		httpx.AbortUnexpected(c, err)
 		return
 	}
-	b, err := h.Svc.Get(c.Request.Context(), uid, bid)
+	sv := h.Svc.SettlementView(b, bd)
+	c.JSON(http.StatusOK, gin.H{"breakdown": bookingPaymentFromBreakdown(b, bd, sv)})
+}
+
+type putPostTripChargesReq service.OwnerPutPostTripChargesInput
+
+// PutPostTripCharges lets the owner declare post-trip charges (tolls, damage, fines) after return handover.
+func (h *BookingHandler) PutPostTripCharges(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	var req putPostTripChargesReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Please check your input and try again.")
+		return
+	}
+	lines, err := service.ParsePostTripChargeLines(service.OwnerPutPostTripChargesInput(req))
 	if err != nil {
 		if httpx.AbortService(c, err) {
 			return
@@ -391,7 +542,15 @@ func (h *BookingHandler) PaymentPreview(c *gin.Context) {
 		httpx.AbortUnexpected(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"breakdown": bookingPaymentFromBreakdown(b, bd)})
+	b, err := h.Svc.OwnerPutPostTripCharges(c.Request.Context(), uid, bid, lines)
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
 }
 
 func (h *BookingHandler) Pay(c *gin.Context) {

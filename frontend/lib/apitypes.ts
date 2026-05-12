@@ -46,6 +46,11 @@ export type UserSummary = {
   phone_number: string;
 };
 
+export type BookingPostTripItem = {
+  label: string;
+  amount_inr: string;
+};
+
 export type BookingPaymentBreakdown = {
   payment_status: string;
   payment_method?: string;
@@ -61,6 +66,42 @@ export type BookingPaymentBreakdown = {
   customer_total_inr: string;
   owner_net_inr: string;
   platform_commission_total_inr: string;
+  /** unpaid_deposit | awaiting_settlement | final_due | paid */
+  payment_phase?: string;
+  deposit_percent?: number;
+  deposit_due_inr?: string;
+  deposit_paid_inr?: string;
+  deposit_paid_at?: string;
+  trip_balance_inr?: string;
+  post_trip_charges_inr?: string;
+  final_due_inr?: string;
+  owner_projected_payout_inr?: string;
+  post_trip_items?: BookingPostTripItem[];
+};
+
+export type BookingCancellation = {
+  reason: string;
+  cancelled_at: string;
+  cancelled_by_role: string;
+};
+
+export type BookingHandover = {
+  pickup_odometer_km?: number | null;
+  pickup_fuel_percent?: number | null;
+  pickup_notes?: string;
+  pickup_recorded_at?: string | null;
+  return_odometer_km?: number | null;
+  return_fuel_percent?: number | null;
+  return_notes?: string;
+  return_recorded_at?: string | null;
+};
+
+export type BookingReviewRow = {
+  party: string;
+  rating: number;
+  comment: string;
+  reviewer: UserSummary;
+  created_at: string;
 };
 
 export type Booking = {
@@ -81,6 +122,9 @@ export type Booking = {
   owner: UserSummary;
   /** Present when the booking is CONFIRMED and an agreed price exists (commission math for customer pay / owner net). */
   payment?: BookingPaymentBreakdown;
+  cancellation?: BookingCancellation | null;
+  handover?: BookingHandover | null;
+  reviews?: BookingReviewRow[];
 };
 
 export type Message = {

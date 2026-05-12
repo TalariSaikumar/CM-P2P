@@ -79,17 +79,23 @@ export default function CustomerBookingsPage() {
                     <span className="ml-2">· Agreed ₹{b.final_booking_price}</span>
                   )}
                   {b.payment?.payment_status === "PAID" && (
-                    <span className="ml-2 font-medium text-emerald-800">· Paid</span>
+                    <span className="ml-2 font-medium text-emerald-800">· Fully paid</span>
+                  )}
+                  {b.payment?.payment_status === "DEPOSIT_PAID" && (
+                    <span className="ml-2 font-medium text-amber-800">· Deposit paid</span>
+                  )}
+                  {b.payment?.payment_status === "FINAL_DUE" && (
+                    <span className="ml-2 font-medium text-amber-900">· Final payment due</span>
                   )}
                 </p>
               </div>
               <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row">
-                {b.status === "CONFIRMED" && b.payment?.payment_status === "UNPAID" && (
+                {b.status === "CONFIRMED" && (b.payment?.payment_status === "UNPAID" || b.payment?.payment_status === "FINAL_DUE") && (
                   <Link
                     className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md bg-emerald-700 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-800 sm:w-auto sm:py-1.5"
                     href={`/customer/bookings/${b.id}/pay`}
                   >
-                    Pay
+                    {b.payment?.payment_status === "FINAL_DUE" ? "Pay final balance" : "Pay deposit"}
                   </Link>
                 )}
                 <Link

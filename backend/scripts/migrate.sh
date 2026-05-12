@@ -35,7 +35,7 @@ fi
 
 for file in "${files[@]}"; do
   echo "Applying $direction migration: $(basename "$file")"
-  psql "$database_url" -v ON_ERROR_STOP=1 -f "$file"
+  psql -v ON_ERROR_STOP=1 --dbname="$database_url" -f "$file"
 done
 
 echo "All '$direction' migrations applied successfully."

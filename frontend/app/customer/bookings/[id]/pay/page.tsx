@@ -187,11 +187,14 @@ export default function CustomerPayBookingPage() {
     );
   }
 
-  if (booking.payment?.payment_status === "PAID") {
+  const phase = breakdown.payment_phase ?? "";
+  const payStatus = booking.payment?.payment_status ?? "";
+
+  if (payStatus === "PAID") {
     return (
       <main className="page-shell w-full max-w-3xl space-y-4">
         <h1 className="text-xl font-semibold">Already paid</h1>
-        <p className="text-sm text-slate-600">This booking is marked as paid.</p>
+        <p className="text-sm text-slate-600">This booking is fully settled.</p>
         <Link href={`/bookings/${id}`} className="text-sm font-medium text-emerald-800 hover:text-emerald-900">
           ← Back to booking
         </Link>
@@ -199,15 +202,50 @@ export default function CustomerPayBookingPage() {
     );
   }
 
+  if (payStatus === "DEPOSIT_PAID" && phase === "awaiting_settlement") {
+    return (
+      <main className="page-shell w-full max-w-3xl space-y-4">
+        <h1 className="text-xl font-semibold">Waiting for final bill</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Your <strong>75% deposit</strong> is recorded. After the trip, the owner will verify the vehicle and submit
+          any tolls, fines, or damage charges if applicable. You will return here to pay the remaining balance.
+        </p>
+        <Link href={`/bookings/${id}`} className="text-sm font-medium text-emerald-800 hover:text-emerald-900">
+          ← Back to booking
+        </Link>
+      </main>
+    );
+  }
+
+  const dueNowInr =
+    phase === "final_due" && breakdown.final_due_inr
+      ? breakdown.final_due_inr
+      : breakdown.deposit_due_inr || breakdown.customer_total_inr;
+
   return (
     <>
       {paying ? <OverlayLoader message="Completing payment…" /> : null}
       <main className="page-shell w-full max-w-6xl pb-12">
       <div className="border-b border-slate-200/80 pb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Pay for your booking</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+          {phase === "final_due" ? "Pay final balance" : "Pay trip deposit"}
+        </h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-600 sm:text-base">
-          {booking.car.car_name} · {booking.car.car_model} — after the owner confirms, you pay the amount below
-          (simulated checkout; no real card charge).
+          {booking.car.car_name} · {booking.car.car_model}
+          {phase === "final_due" ? (
+            <>
+              {" "}
+              — you are paying the <strong>remaining trip balance</strong> plus any post-trip charges the owner
+              submitted (simulated checkout; no real card charge).
+            </>
+          ) : (
+            <>
+              {" "}
+              — you pay <strong>{breakdown.deposit_percent ?? 75}%</strong> of your trip total now as a deposit. The
+              rest is due after the trip when the owner confirms any extra charges (simulated checkout; no real card
+              charge).
+            </>
+          )}
         </p>
       </div>
 
@@ -230,9 +268,47 @@ export default function CustomerPayBookingPage() {
                 <span className="shrink-0 tabular-nums text-slate-800">+ ₹{breakdown.customer_gst_inr}</span>
               </li>
               <li className="flex justify-between gap-4 border-t border-slate-200 pt-3 text-base font-semibold text-slate-900">
-                <span>You pay</span>
-                <span className="shrink-0 text-lg tabular-nums text-emerald-900">₹{breakdown.customer_total_inr}</span>
+                <span>Trip total (incl. fees)</span>
+                <span className="shrink-0 text-lg tabular-nums text-slate-900">₹{breakdown.customer_total_inr}</span>
               </li>
+              {phase === "final_due" ? (
+                <>
+                  {Number(breakdown.deposit_paid_inr) > 0 && (
+                    <li className="flex justify-between gap-4 text-sm text-slate-700">
+                      <span>Deposit paid ({breakdown.deposit_percent ?? 75}%)</span>
+                      <span className="shrink-0 tabular-nums text-slate-800">− ₹{breakdown.deposit_paid_inr}</span>
+                    </li>
+                  )}
+                  {Number(breakdown.post_trip_charges_inr) > 0 && (
+                    <li className="flex justify-between gap-4 text-sm text-slate-700">
+                      <span>Post-trip charges (owner)</span>
+                      <span className="shrink-0 tabular-nums text-slate-800">+ ₹{breakdown.post_trip_charges_inr}</span>
+                    </li>
+                  )}
+                  {breakdown.post_trip_items && breakdown.post_trip_items.length > 0 && (
+                    <li className="border-t border-slate-100 pt-2 text-xs text-slate-600">
+                      <p className="font-medium text-slate-700">Charge lines</p>
+                      <ul className="mt-1 space-y-1">
+                        {breakdown.post_trip_items.map((it, i) => (
+                          <li key={`${it.label}-${i}`} className="flex justify-between gap-2">
+                            <span className="min-w-0 truncate">{it.label}</span>
+                            <span className="shrink-0 tabular-nums">₹{it.amount_inr}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  )}
+                  <li className="flex justify-between gap-4 border-t border-slate-200 pt-3 text-base font-semibold text-emerald-950">
+                    <span>Due now</span>
+                    <span className="shrink-0 text-lg tabular-nums text-emerald-900">₹{dueNowInr}</span>
+                  </li>
+                </>
+              ) : (
+                <li className="flex justify-between gap-4 border-t border-slate-200 pt-3 text-base font-semibold text-emerald-950">
+                  <span>Due now ({breakdown.deposit_percent ?? 75}% deposit)</span>
+                  <span className="shrink-0 text-lg tabular-nums text-emerald-900">₹{dueNowInr}</span>
+                </li>
+              )}
             </ul>
           </div>
         </aside>
@@ -411,7 +487,7 @@ export default function CustomerPayBookingPage() {
                   Processing…
                 </>
               ) : (
-                `Pay ₹${breakdown.customer_total_inr}`
+                `Pay ₹${dueNowInr}`
               )}
             </button>
             <Link

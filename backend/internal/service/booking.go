@@ -23,12 +23,13 @@ type BookingService struct {
 }
 
 type CreateBookingInput struct {
-	CarID        uuid.UUID
-	CustomerNote string
-	RentalFrom   time.Time
-	RentalTo     time.Time
-	PickupPoint  string
-	DropPoint    string
+	CarID                     uuid.UUID
+	CustomerNote              string
+	RentalFrom                time.Time
+	RentalTo                  time.Time
+	PickupPoint               string
+	DropPoint                 string
+	AcknowledgedDepositTerms bool
 }
 
 // ParseBookingDateTime accepts RFC3339, date-only YYYY-MM-DD (UTC midnight), or YYYY-MM-DDTHH:MM:SS (UTC).
@@ -98,16 +99,22 @@ func (s *BookingService) Create(ctx context.Context, customerID uuid.UUID, in Cr
 		return nil, httpx.ErrCarAlreadyBooked
 	}
 
+	if !in.AcknowledgedDepositTerms {
+		return nil, httpx.ErrBookingTermsNotAck
+	}
+
+	nowAck := time.Now().UTC()
 	b := &models.Booking{
-		CarID:        car.ID,
-		CustomerID:   customerID,
-		OwnerID:      car.OwnerID,
-		Status:       models.BookingPending,
-		CustomerNote: strings.TrimSpace(in.CustomerNote),
-		RentalFrom:   in.RentalFrom.UTC(),
-		RentalTo:     in.RentalTo.UTC(),
-		PickupPoint:  pickup,
-		DropPoint:    drop,
+		CarID:                       car.ID,
+		CustomerID:                  customerID,
+		OwnerID:                     car.OwnerID,
+		Status:                      models.BookingPending,
+		CustomerNote:                strings.TrimSpace(in.CustomerNote),
+		RentalFrom:                  in.RentalFrom.UTC(),
+		RentalTo:                    in.RentalTo.UTC(),
+		PickupPoint:                 pickup,
+		DropPoint:                   drop,
+		CustomerAcknowledgedTermsAt: &nowAck,
 	}
 	if err := s.Repo.CreateBooking(ctx, b); err != nil {
 		return nil, err
@@ -256,6 +263,10 @@ func (s *BookingService) Withdraw(ctx context.Context, customerID, bookingID uui
 	}
 
 	b.Status = models.BookingCancelled
+	now := time.Now().UTC()
+	b.CancellationReason = "Withdrawn by customer before a final price was set."
+	b.CancelledAt = &now
+	b.CancelledByUserID = &customerID
 	if err := s.Repo.UpdateBooking(ctx, b); err != nil {
 		return nil, err
 	}
@@ -363,7 +374,7 @@ func (s *BookingService) PostMessage(ctx context.Context, senderID, bookingID uu
 	if b.CustomerID != senderID && b.OwnerID != senderID {
 		return nil, httpx.ErrForbidden
 	}
-	if b.Status == models.BookingConfirmed || b.Status == models.BookingCancelled {
+	if b.Status == models.BookingCancelled {
 		return nil, httpx.NewError(409, "BOOKING_CLOSED", "Messaging is closed for this booking.")
 	}
 
@@ -467,28 +478,32 @@ func (s *BookingService) BreakdownForBooking(b *models.Booking) (PaymentBreakdow
 	return BuildPaymentBreakdown(base, c, o, g), nil
 }
 
-// CustomerPaymentPreview returns the INR breakdown for a confirmed booking (customer only).
-func (s *BookingService) CustomerPaymentPreview(ctx context.Context, customerID, bookingID uuid.UUID) (PaymentBreakdown, error) {
+// CustomerPaymentPreview returns the booking (with relations) and INR breakdown for a confirmed booking (customer only).
+func (s *BookingService) CustomerPaymentPreview(ctx context.Context, customerID, bookingID uuid.UUID) (*models.Booking, PaymentBreakdown, error) {
 	b, err := s.Repo.GetBookingByID(ctx, bookingID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return PaymentBreakdown{}, httpx.ErrNotFound
+			return nil, PaymentBreakdown{}, httpx.ErrNotFound
 		}
-		return PaymentBreakdown{}, err
+		return nil, PaymentBreakdown{}, err
 	}
 	if b.CustomerID != customerID {
-		return PaymentBreakdown{}, httpx.ErrForbidden
+		return nil, PaymentBreakdown{}, httpx.ErrForbidden
 	}
 	if b.Status != models.BookingConfirmed {
-		return PaymentBreakdown{}, httpx.ErrPaymentNotReady
+		return nil, PaymentBreakdown{}, httpx.ErrPaymentNotReady
 	}
 	if b.FinalBookingPrice == nil {
-		return PaymentBreakdown{}, httpx.ErrPaymentNotReady
+		return nil, PaymentBreakdown{}, httpx.ErrPaymentNotReady
 	}
-	return s.BreakdownForBooking(b)
+	bd, err := s.BreakdownForBooking(b)
+	if err != nil {
+		return nil, PaymentBreakdown{}, err
+	}
+	return b, bd, nil
 }
 
-// CustomerRecordPayment simulates a successful payment and stores commission breakdown on the booking.
+// CustomerRecordPayment records the 75% deposit first, then the final balance after the owner submits post-trip charges.
 func (s *BookingService) CustomerRecordPayment(ctx context.Context, customerID, bookingID uuid.UUID, methodRaw string) (*models.Booking, error) {
 	method := NormalizePaymentMethod(methodRaw)
 	if method == "" {
@@ -519,7 +534,7 @@ func (s *BookingService) CustomerRecordPayment(ctx context.Context, customerID, 
 	if err != nil {
 		return nil, err
 	}
-
+	sv := s.SettlementView(b, bd)
 	now := time.Now().UTC()
 	cr := decimal.NewFromFloat(bd.CustomerCommissionPct).Round(3)
 	or := decimal.NewFromFloat(bd.OwnerCommissionPct).Round(3)
@@ -527,25 +542,212 @@ func (s *BookingService) CustomerRecordPayment(ctx context.Context, customerID, 
 	oc := bd.OwnerCommissionAmount
 	cgst := bd.CustomerGSTAmount
 	ogst := bd.OwnerGSTAmount
-	ct := bd.CustomerTotal
-	on := bd.OwnerNet
 	gstPctDec := decimal.NewFromFloat(bd.GstPercentOnCommission).Round(2)
 
-	b.PaymentStatus = models.BookingPaymentPaid
-	b.PaymentMethod = method
-	b.PaidAt = &now
-	b.CustomerCommissionRate = &cr
-	b.OwnerCommissionRate = &or
-	b.CustomerCommissionAmount = &cc
-	b.OwnerCommissionAmount = &oc
-	b.CustomerGSTAmount = &cgst
-	b.OwnerGSTAmount = &ogst
-	b.GstPercentOnCommission = &gstPctDec
-	b.CustomerTotalPaid = &ct
-	b.OwnerNetPayout = &on
+	switch b.PaymentStatus {
+	case models.BookingPaymentUnpaid:
+		dep := sv.DepositDueInr
+		if dep.IsZero() {
+			return nil, httpx.WrapValidation("Deposit amount is invalid.")
+		}
+		b.PaymentStatus = models.BookingPaymentDepositPaid
+		b.DepositPaidAt = &now
+		b.DepositCustomerTotal = &dep
+		b.PaymentMethod = method
+		if err := s.Repo.UpdateBooking(ctx, b); err != nil {
+			return nil, err
+		}
+		return s.Repo.GetBookingByID(ctx, bookingID)
 
+	case models.BookingPaymentDepositPaid:
+		return nil, httpx.ErrSettlementNotReady
+
+	case models.BookingPaymentFinalDue:
+		ctFull := bd.CustomerTotal.Add(b.PostTripChargesTotal).Round(2)
+		onFull := bd.OwnerNet.Add(b.PostTripChargesTotal).Round(2)
+
+		b.PaymentStatus = models.BookingPaymentPaid
+		b.PaymentMethod = method
+		b.PaidAt = &now
+		b.CustomerCommissionRate = &cr
+		b.OwnerCommissionRate = &or
+		b.CustomerCommissionAmount = &cc
+		b.OwnerCommissionAmount = &oc
+		b.CustomerGSTAmount = &cgst
+		b.OwnerGSTAmount = &ogst
+		b.GstPercentOnCommission = &gstPctDec
+		b.CustomerTotalPaid = &ctFull
+		b.OwnerNetPayout = &onFull
+
+		if err := s.Repo.UpdateBooking(ctx, b); err != nil {
+			return nil, err
+		}
+		return s.Repo.GetBookingByID(ctx, bookingID)
+
+	default:
+		return nil, httpx.ErrPaymentNotReady
+	}
+}
+
+// CancelBooking ends an inquiry or an unpaid confirmed booking. Paid trips cannot be self-cancelled.
+func (s *BookingService) CancelBooking(ctx context.Context, userID, bookingID uuid.UUID, reason string) (*models.Booking, error) {
+	b, err := s.Repo.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, httpx.ErrNotFound
+		}
+		return nil, err
+	}
+	if b.CustomerID != userID && b.OwnerID != userID {
+		return nil, httpx.ErrForbidden
+	}
+	if b.Status == models.BookingCancelled {
+		return nil, httpx.ErrConflict
+	}
+	switch b.Status {
+	case models.BookingPending, models.BookingNegotiating:
+		// ok
+	case models.BookingConfirmed:
+		if b.PaymentStatus != models.BookingPaymentUnpaid {
+			return nil, httpx.ErrBookingPaidNoCancel
+		}
+	default:
+		return nil, httpx.NewError(409, "BOOKING_STATE", "This booking cannot be cancelled.")
+	}
+
+	reason = strings.TrimSpace(reason)
+	if len(reason) > 2000 {
+		reason = reason[:2000]
+	}
+	if reason == "" {
+		reason = "Cancelled by user."
+	}
+	now := time.Now().UTC()
+	b.Status = models.BookingCancelled
+	b.CancellationReason = reason
+	b.CancelledAt = &now
+	b.CancelledByUserID = &userID
 	if err := s.Repo.UpdateBooking(ctx, b); err != nil {
 		return nil, err
 	}
 	return s.Repo.GetBookingByID(ctx, bookingID)
+}
+
+type PatchHandoverInput struct {
+	Phase       string
+	OdometerKM  int
+	FuelPercent *int
+	Notes       string
+}
+
+// PatchHandover records pickup or return odometer (and optional fuel/notes) once per phase.
+func (s *BookingService) PatchHandover(ctx context.Context, userID, bookingID uuid.UUID, in PatchHandoverInput) (*models.Booking, error) {
+	b, err := s.Repo.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, httpx.ErrNotFound
+		}
+		return nil, err
+	}
+	if b.CustomerID != userID && b.OwnerID != userID {
+		return nil, httpx.ErrForbidden
+	}
+	if b.Status != models.BookingConfirmed {
+		return nil, httpx.NewError(409, "BOOKING_STATE", "Handover can only be recorded after the booking is confirmed.")
+	}
+	phase := strings.ToLower(strings.TrimSpace(in.Phase))
+	if phase != "pickup" && phase != "return" {
+		return nil, httpx.WrapValidation(`Phase must be "pickup" or "return".`)
+	}
+	if in.OdometerKM <= 0 || in.OdometerKM > 2000000 {
+		return nil, httpx.WrapValidation("Odometer must be a positive distance in km.")
+	}
+	if in.FuelPercent != nil {
+		fp := *in.FuelPercent
+		if fp < 0 || fp > 100 {
+			return nil, httpx.WrapValidation("Fuel percent must be between 0 and 100.")
+		}
+	}
+	notes := strings.TrimSpace(in.Notes)
+	if len(notes) > 5000 {
+		notes = notes[:5000]
+	}
+	now := time.Now().UTC()
+	od := in.OdometerKM
+	if phase == "pickup" {
+		if b.PickupHandoverAt != nil {
+			return nil, httpx.ErrHandoverExists
+		}
+		b.PickupOdometerKM = &od
+		b.PickupFuelPercent = in.FuelPercent
+		b.PickupHandoverNotes = notes
+		b.PickupHandoverAt = &now
+	} else {
+		if b.ReturnHandoverAt != nil {
+			return nil, httpx.ErrHandoverExists
+		}
+		if b.PickupOdometerKM != nil && od < *b.PickupOdometerKM {
+			return nil, httpx.WrapValidation("Return odometer must be greater than or equal to pickup odometer.")
+		}
+		b.ReturnOdometerKM = &od
+		b.ReturnFuelPercent = in.FuelPercent
+		b.ReturnHandoverNotes = notes
+		b.ReturnHandoverAt = &now
+	}
+	if err := s.Repo.UpdateBooking(ctx, b); err != nil {
+		return nil, err
+	}
+	return s.Repo.GetBookingByID(ctx, bookingID)
+}
+
+// SubmitReview adds a 1–5 star review after rental_to (UTC) once payment is PAID.
+func (s *BookingService) SubmitReview(ctx context.Context, reviewerID, bookingID uuid.UUID, rating int, comment string) (*models.BookingReview, error) {
+	b, err := s.Repo.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, httpx.ErrNotFound
+		}
+		return nil, err
+	}
+	if b.Status != models.BookingConfirmed {
+		return nil, httpx.NewError(409, "BOOKING_STATE", "Reviews are only available for confirmed bookings.")
+	}
+	if b.PaymentStatus != models.BookingPaymentPaid {
+		return nil, httpx.NewError(400, "REVIEW_NOT_READY", "Payment must be completed before reviews open.")
+	}
+	if !time.Now().UTC().After(b.RentalTo.UTC()) {
+		return nil, httpx.WrapValidation("Reviews open after the rental end date.")
+	}
+	var party string
+	switch reviewerID {
+	case b.CustomerID:
+		party = "CUSTOMER"
+	case b.OwnerID:
+		party = "OWNER"
+	default:
+		return nil, httpx.ErrForbidden
+	}
+	for i := range b.Reviews {
+		if b.Reviews[i].ReviewerParty == party {
+			return nil, httpx.ErrReviewExists
+		}
+	}
+	if rating < 1 || rating > 5 {
+		return nil, httpx.WrapValidation("Rating must be between 1 and 5.")
+	}
+	comment = strings.TrimSpace(comment)
+	if len(comment) > 5000 {
+		comment = comment[:5000]
+	}
+	r := &models.BookingReview{
+		BookingID:     bookingID,
+		ReviewerParty: party,
+		ReviewerID:    reviewerID,
+		Rating:        rating,
+		Comment:       comment,
+	}
+	if err := s.Repo.CreateBookingReview(ctx, r); err != nil {
+		return nil, err
+	}
+	return r, nil
 }

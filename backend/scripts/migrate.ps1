@@ -33,7 +33,8 @@ if (-not $files) {
 
 foreach ($file in $files) {
     Write-Host "Applying $Direction migration: $($file.Name)"
-    & psql "$DatabaseUrl" -v ON_ERROR_STOP=1 -f "$($file.FullName)"
+    # Options before --dbname so Windows psql does not treat -v/-f as part of a positional URI.
+    & psql -v ON_ERROR_STOP=1 --dbname="$DatabaseUrl" -f "$($file.FullName)"
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Migration failed: $($file.Name)"
         exit $LASTEXITCODE

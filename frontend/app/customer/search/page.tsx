@@ -42,6 +42,7 @@ export default function CustomerSearchPage() {
   const [pickupPoint, setPickupPoint] = useState("");
   const [dropPoint, setDropPoint] = useState("");
   const [customerNote, setCustomerNote] = useState("");
+  const [ackDepositTerms, setAckDepositTerms] = useState(false);
 
   const loadPage = useCallback(
     async (p: number) => {
@@ -106,6 +107,7 @@ export default function CustomerSearchPage() {
     setPickupPoint("");
     setDropPoint("");
     setCustomerNote("");
+    setAckDepositTerms(false);
   }
 
   function closeBookingModal() {
@@ -115,6 +117,10 @@ export default function CustomerSearchPage() {
 
   async function submitBooking() {
     if (!bookingCar) return;
+    if (!ackDepositTerms) {
+      setError("Please read and tick the payment acknowledgement to continue.");
+      return;
+    }
     if (!rentalFrom || !rentalTo) {
       setError("Please choose rental start and end dates.");
       return;
@@ -135,6 +141,7 @@ export default function CustomerSearchPage() {
           rental_to: toEndOfDayUTC(rentalTo),
           pickup_point: pickupPoint.trim(),
           drop_point: dropPoint.trim(),
+          acknowledged_deposit_terms: true,
         }),
       });
       closeBookingModal();
@@ -337,6 +344,35 @@ export default function CustomerSearchPage() {
                     setCustomerNote(e.target.value);
                   }}
                 />
+              </div>
+              <div className="rounded-md border border-amber-200 bg-amber-50/90 p-3 text-sm text-amber-950">
+                <p className="font-medium text-amber-950">Payment &amp; after-trip billing</p>
+                <ul className="mt-2 list-inside list-disc space-y-1.5 text-amber-950/95">
+                  <li>
+                    After the owner confirms the agreed price, you pay <strong>75%</strong> of your trip total (rental +
+                    platform fees + GST on that total) as a <strong>deposit</strong> to lock the booking.
+                  </li>
+                  <li>
+                    When the rental ends, the owner checks the car and may add documented charges (for example tolls /
+                    Fastag, traffic fines, scratches or other damage). Those amounts are added to your bill.
+                  </li>
+                  <li>
+                    You then pay the <strong>remaining balance</strong> (the rest of the trip total plus any approved
+                    post-trip charges). Reviews open only after that final payment is complete.
+                  </li>
+                </ul>
+                <label className="mt-3 flex cursor-pointer items-start gap-2 text-sm font-medium text-amber-950">
+                  <input
+                    type="checkbox"
+                    className="mt-1 h-4 w-4 shrink-0 rounded border-amber-400 text-amber-900"
+                    checked={ackDepositTerms}
+                    onChange={(e) => {
+                      setError(null);
+                      setAckDepositTerms(e.target.checked);
+                    }}
+                  />
+                  <span>I understand the deposit, post-trip charges, and final payment steps above.</span>
+                </label>
               </div>
             </div>
             <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

@@ -7,6 +7,7 @@ import (
 	"carmanage/backend/internal/models"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // activeBookingStatuses block another rental when their windows overlap.
@@ -61,7 +62,17 @@ func (d *DB) CreateBooking(ctx context.Context, b *models.Booking) error {
 // GetBookingByID loads booking with relations.
 func (d *DB) GetBookingByID(ctx context.Context, id uuid.UUID) (*models.Booking, error) {
 	var b models.Booking
-	if err := d.WithContext(ctx).Preload("Car").Preload("Car.Images").Preload("Customer").Preload("Owner").First(&b, "id = ?", id).Error; err != nil {
+	if err := d.WithContext(ctx).
+		Preload("Car").Preload("Car.Images").
+		Preload("Customer").Preload("Owner").
+		Preload("PostTripCharges", func(db *gorm.DB) *gorm.DB {
+			return db.Order("booking_post_trip_charges.created_at asc")
+		}).
+		Preload("Reviews", func(db *gorm.DB) *gorm.DB {
+			return db.Order("booking_reviews.created_at asc")
+		}).
+		Preload("Reviews.Reviewer").
+		First(&b, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	return &b, nil

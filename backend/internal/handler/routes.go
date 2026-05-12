@@ -77,6 +77,9 @@ func RegisterWithDeps(r *gin.RouterGroup, d Deps) {
 		au.GET("/bookings/:id", bookH.Get)
 		au.GET("/bookings/:id/messages", bookH.ListMessages)
 		au.POST("/bookings/:id/messages", bookH.PostMessage)
+		au.POST("/bookings/:id/cancel", bookH.Cancel)
+		au.PATCH("/bookings/:id/handover", bookH.PatchHandover)
+		au.POST("/bookings/:id/reviews", bookH.PostReview)
 
 		ownerPrice := au.Group("")
 		ownerPrice.Use(middleware.RequireRole(models.RoleOwner))
@@ -84,6 +87,7 @@ func RegisterWithDeps(r *gin.RouterGroup, d Deps) {
 		{
 			ownerPrice.PATCH("/bookings/:id/price", bookH.PatchPrice)
 			ownerPrice.POST("/bookings/:id/confirm", bookH.Confirm)
+			ownerPrice.PUT("/bookings/:id/post-trip-charges", bookH.PutPostTripCharges)
 		}
 	}
 }
