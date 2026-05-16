@@ -119,6 +119,25 @@ func (s *BookingService) Create(ctx context.Context, customerID uuid.UUID, in Cr
 	if err := s.Repo.CreateBooking(ctx, b); err != nil {
 		return nil, err
 	}
+
+	note := strings.TrimSpace(in.CustomerNote)
+	if note != "" {
+		m := &models.Message{
+			BookingID: b.ID,
+			SenderID:  customerID,
+			Body:      note,
+		}
+		if err := s.Repo.CreateMessage(ctx, m); err != nil {
+			return nil, err
+		}
+		if b.Status == models.BookingPending {
+			b.Status = models.BookingNegotiating
+			if err := s.Repo.UpdateBooking(ctx, b); err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	return s.Repo.GetBookingByID(ctx, b.ID)
 }
 
@@ -182,6 +201,48 @@ func (s *BookingService) PatchFinalPrice(ctx context.Context, ownerID, bookingID
 	}
 
 	b.FinalBookingPrice = &price
+	b.CustomerAcceptedPriceAt = nil
+	b.CustomerAcceptedPriceAmount = nil
+	if err := s.Repo.UpdateBooking(ctx, b); err != nil {
+		return nil, err
+	}
+	return s.Repo.GetBookingByID(ctx, bookingID)
+}
+
+// CustomerHasAcceptedQuotedPrice is true when the customer accepted the owner's current quoted amount.
+func CustomerHasAcceptedQuotedPrice(b *models.Booking) bool {
+	if b.FinalBookingPrice == nil || b.CustomerAcceptedPriceAt == nil || b.CustomerAcceptedPriceAmount == nil {
+		return false
+	}
+	return b.FinalBookingPrice.Equal(*b.CustomerAcceptedPriceAmount)
+}
+
+// CustomerAcceptQuotedPrice records that the customer is satisfied with the owner's current quoted price.
+func (s *BookingService) CustomerAcceptQuotedPrice(ctx context.Context, customerID, bookingID uuid.UUID) (*models.Booking, error) {
+	b, err := s.Repo.GetBookingByID(ctx, bookingID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, httpx.ErrNotFound
+		}
+		return nil, err
+	}
+	if b.CustomerID != customerID {
+		return nil, httpx.ErrForbidden
+	}
+	if b.Status == models.BookingConfirmed || b.Status == models.BookingCancelled {
+		return nil, httpx.NewError(409, "BOOKING_CLOSED", "This booking can no longer be updated.")
+	}
+	if b.FinalBookingPrice == nil {
+		return nil, httpx.ErrPriceNotQuoted
+	}
+	if CustomerHasAcceptedQuotedPrice(b) {
+		return b, nil
+	}
+
+	now := time.Now().UTC()
+	amt := b.FinalBookingPrice.Copy()
+	b.CustomerAcceptedPriceAt = &now
+	b.CustomerAcceptedPriceAmount = &amt
 	if err := s.Repo.UpdateBooking(ctx, b); err != nil {
 		return nil, err
 	}
@@ -207,6 +268,9 @@ func (s *BookingService) Confirm(ctx context.Context, ownerID, bookingID uuid.UU
 	}
 	if b.FinalBookingPrice == nil {
 		return nil, httpx.NewError(400, "PRICE_NOT_SET", "Set the final agreed price before confirming.")
+	}
+	if !CustomerHasAcceptedQuotedPrice(b) {
+		return nil, httpx.ErrCustomerPriceNotAccepted
 	}
 
 	b.Status = models.BookingConfirmed
@@ -374,7 +438,7 @@ func (s *BookingService) PostMessage(ctx context.Context, senderID, bookingID uu
 	if b.CustomerID != senderID && b.OwnerID != senderID {
 		return nil, httpx.ErrForbidden
 	}
-	if b.Status == models.BookingCancelled {
+	if b.Status == models.BookingCancelled || b.Status == models.BookingCompleted {
 		return nil, httpx.NewError(409, "BOOKING_CLOSED", "Messaging is closed for this booking.")
 	}
 
@@ -433,49 +497,28 @@ func (s *BookingService) commissionRates() (customerPct, ownerPct, gstOnCommissi
 	return c, o, g
 }
 
-// BreakdownForBooking returns commission math for the agreed price (uses stored amounts when already paid).
+// BreakdownForBooking returns commission math on trip rental (per-day negotiated rate × trip days).
 func (s *BookingService) BreakdownForBooking(b *models.Booking) (PaymentBreakdown, error) {
 	if b.FinalBookingPrice == nil {
 		return PaymentBreakdown{}, httpx.WrapValidation("Agreed price is not set.")
 	}
-	base := *b.FinalBookingPrice
+	tripBase := AgreedRentalBaseForBooking(b)
 
-	if b.PaymentStatus == models.BookingPaymentPaid &&
-		b.CustomerCommissionRate != nil && b.OwnerCommissionRate != nil &&
-		b.CustomerCommissionAmount != nil && b.OwnerCommissionAmount != nil &&
-		b.CustomerTotalPaid != nil && b.OwnerNetPayout != nil {
-		cPct, _ := b.CustomerCommissionRate.Float64()
-		oPct, _ := b.OwnerCommissionRate.Float64()
-		gstPct := 0.0
+	cPct, oPct, gstPct := s.commissionRates()
+	if b.PaymentStatus == models.BookingPaymentPaid {
+		if b.CustomerCommissionRate != nil {
+			cPct, _ = b.CustomerCommissionRate.Float64()
+		}
+		if b.OwnerCommissionRate != nil {
+			oPct, _ = b.OwnerCommissionRate.Float64()
+		}
 		if b.GstPercentOnCommission != nil {
 			gstPct, _ = b.GstPercentOnCommission.Float64()
 		}
-		cgst := decimal.Zero
-		if b.CustomerGSTAmount != nil {
-			cgst = *b.CustomerGSTAmount
-		}
-		ogst := decimal.Zero
-		if b.OwnerGSTAmount != nil {
-			ogst = *b.OwnerGSTAmount
-		}
-		platform := b.CustomerCommissionAmount.Add(*b.OwnerCommissionAmount).Add(cgst).Add(ogst).Round(2)
-		return PaymentBreakdown{
-			AgreedBase:               base,
-			CustomerCommissionPct:    cPct,
-			OwnerCommissionPct:       oPct,
-			GstPercentOnCommission:   gstPct,
-			CustomerCommissionAmount: *b.CustomerCommissionAmount,
-			OwnerCommissionAmount:    *b.OwnerCommissionAmount,
-			CustomerGSTAmount:        cgst,
-			OwnerGSTAmount:           ogst,
-			CustomerTotal:            *b.CustomerTotalPaid,
-			OwnerNet:                 *b.OwnerNetPayout,
-			PlatformTotal:            platform,
-		}, nil
 	}
 
-	c, o, g := s.commissionRates()
-	return BuildPaymentBreakdown(base, c, o, g), nil
+	bd := BuildPaymentBreakdown(tripBase, cPct, oPct, gstPct)
+	return bd, nil
 }
 
 // CustomerPaymentPreview returns the booking (with relations) and INR breakdown for a confirmed booking (customer only).
@@ -564,7 +607,6 @@ func (s *BookingService) CustomerRecordPayment(ctx context.Context, customerID, 
 
 	case models.BookingPaymentFinalDue:
 		ctFull := bd.CustomerTotal.Add(b.PostTripChargesTotal).Round(2)
-		onFull := bd.OwnerNet.Add(b.PostTripChargesTotal).Round(2)
 
 		b.PaymentStatus = models.BookingPaymentPaid
 		b.PaymentMethod = method
@@ -577,7 +619,8 @@ func (s *BookingService) CustomerRecordPayment(ctx context.Context, customerID, 
 		b.OwnerGSTAmount = &ogst
 		b.GstPercentOnCommission = &gstPctDec
 		b.CustomerTotalPaid = &ctFull
-		b.OwnerNetPayout = &onFull
+		ownerRentalNet := bd.OwnerNet.Round(2)
+		b.OwnerNetPayout = &ownerRentalNet
 
 		if err := s.Repo.UpdateBooking(ctx, b); err != nil {
 			return nil, err
@@ -640,7 +683,7 @@ type PatchHandoverInput struct {
 	Notes       string
 }
 
-// PatchHandover records pickup or return odometer (and optional fuel/notes) once per phase.
+// PatchHandover records owner vehicle handover, customer pickup check-in, or return handover.
 func (s *BookingService) PatchHandover(ctx context.Context, userID, bookingID uuid.UUID, in PatchHandoverInput) (*models.Booking, error) {
 	b, err := s.Repo.GetBookingByID(ctx, bookingID)
 	if err != nil {
@@ -654,6 +697,9 @@ func (s *BookingService) PatchHandover(ctx context.Context, userID, bookingID uu
 	}
 	if b.Status != models.BookingConfirmed {
 		return nil, httpx.NewError(409, "BOOKING_STATE", "Handover can only be recorded after the booking is confirmed.")
+	}
+	if !DepositPaidForTrip(b) {
+		return nil, httpx.ErrDepositRequiredForHandover
 	}
 	phase := strings.ToLower(strings.TrimSpace(in.Phase))
 	if phase != "pickup" && phase != "return" {
@@ -674,25 +720,65 @@ func (s *BookingService) PatchHandover(ctx context.Context, userID, bookingID uu
 	}
 	now := time.Now().UTC()
 	od := in.OdometerKM
+	isOwner := b.OwnerID == userID
+	isCustomer := b.CustomerID == userID
+
 	if phase == "pickup" {
-		if b.PickupHandoverAt != nil {
-			return nil, httpx.ErrHandoverExists
+		switch {
+		case isOwner:
+			if b.OwnerPickupHandoverAt != nil {
+				return nil, httpx.ErrOwnerHandoverExists
+			}
+			b.OwnerPickupOdometerKM = &od
+			b.OwnerPickupFuelPercent = in.FuelPercent
+			b.OwnerPickupHandoverNotes = notes
+			b.OwnerPickupHandoverAt = &now
+		case isCustomer:
+			if !OwnerPickupRecorded(b) {
+				return nil, httpx.ErrOwnerHandoverRequired
+			}
+			if CustomerPickupComplete(b) {
+				return nil, httpx.ErrCustomerPickupExists
+			}
+			b.PickupOdometerKM = &od
+			b.PickupFuelPercent = in.FuelPercent
+			b.PickupHandoverNotes = notes
+			b.PickupHandoverAt = &now
+			b.CustomerPickupAcceptedAt = &now
+		default:
+			return nil, httpx.ErrForbidden
 		}
-		b.PickupOdometerKM = &od
-		b.PickupFuelPercent = in.FuelPercent
-		b.PickupHandoverNotes = notes
-		b.PickupHandoverAt = &now
 	} else {
-		if b.ReturnHandoverAt != nil {
-			return nil, httpx.ErrHandoverExists
+		if !CustomerPickupComplete(b) {
+			return nil, httpx.ErrOwnerHandoverRequired
 		}
-		if b.PickupOdometerKM != nil && od < *b.PickupOdometerKM {
-			return nil, httpx.WrapValidation("Return odometer must be greater than or equal to pickup odometer.")
+		switch {
+		case isCustomer:
+			if CustomerReturnRecorded(b) {
+				return nil, httpx.ErrCustomerReturnExists
+			}
+			if po := EffectivePickupOdometerKM(b); po != nil && od < *po {
+				return nil, httpx.WrapValidation("Return odometer must be greater than or equal to pickup odometer.")
+			}
+			b.ReturnOdometerKM = &od
+			b.ReturnFuelPercent = in.FuelPercent
+			b.ReturnHandoverNotes = notes
+			b.ReturnHandoverAt = &now
+		case isOwner:
+			if !CustomerReturnRecorded(b) {
+				return nil, httpx.ErrCustomerReturnRequired
+			}
+			if b.PaymentStatus != models.BookingPaymentPaid {
+				return nil, httpx.ErrFinalPaymentRequiredForReturnAccept
+			}
+			if OwnerReturnAccepted(b) {
+				return nil, httpx.ErrOwnerReturnAlreadyAccepted
+			}
+			b.OwnerReturnAcceptedAt = &now
+			b.Status = models.BookingCompleted
+		default:
+			return nil, httpx.ErrForbidden
 		}
-		b.ReturnOdometerKM = &od
-		b.ReturnFuelPercent = in.FuelPercent
-		b.ReturnHandoverNotes = notes
-		b.ReturnHandoverAt = &now
 	}
 	if err := s.Repo.UpdateBooking(ctx, b); err != nil {
 		return nil, err
@@ -709,8 +795,8 @@ func (s *BookingService) SubmitReview(ctx context.Context, reviewerID, bookingID
 		}
 		return nil, err
 	}
-	if b.Status != models.BookingConfirmed {
-		return nil, httpx.NewError(409, "BOOKING_STATE", "Reviews are only available for confirmed bookings.")
+	if b.Status != models.BookingConfirmed && b.Status != models.BookingCompleted {
+		return nil, httpx.NewError(409, "BOOKING_STATE", "Reviews are only available for confirmed or completed bookings.")
 	}
 	if b.PaymentStatus != models.BookingPaymentPaid {
 		return nil, httpx.NewError(400, "REVIEW_NOT_READY", "Payment must be completed before reviews open.")

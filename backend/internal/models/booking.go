@@ -15,6 +15,7 @@ const (
 	BookingPending     BookingStatus = "PENDING"
 	BookingNegotiating BookingStatus = "NEGOTIATING"
 	BookingConfirmed   BookingStatus = "CONFIRMED"
+	BookingCompleted   BookingStatus = "COMPLETED"
 	BookingCancelled   BookingStatus = "CANCELLED"
 )
 
@@ -36,8 +37,12 @@ type Booking struct {
 
 	Status BookingStatus `gorm:"type:varchar(24);not null;default:PENDING;index"`
 
-	// FinalBookingPrice is set only by the owner after negotiation (nullable until agreed).
+	// FinalBookingPrice is the owner-negotiated rate per calendar day (nullable until agreed).
 	FinalBookingPrice *decimal.Decimal `gorm:"type:numeric(14,2)"`
+
+	// Customer accepts the owner's quoted price (cleared when owner changes the price).
+	CustomerAcceptedPriceAt     *time.Time       `gorm:"type:timestamptz"`
+	CustomerAcceptedPriceAmount *decimal.Decimal `gorm:"type:numeric(14,2)"`
 
 	// CustomerNote optional text from the initial booking inquiry.
 	CustomerNote string `gorm:"type:text"`
@@ -72,15 +77,26 @@ type Booking struct {
 	CancelledAt        *time.Time `gorm:"type:timestamptz"`
 	CancelledByUserID  *uuid.UUID `gorm:"type:uuid"`
 
-	// Trip handover (pickup / return) — optional odometer & fuel for disputes and trust.
-	PickupOdometerKM     *int       `gorm:"type:integer"`
-	PickupFuelPercent    *int       `gorm:"type:smallint"`
-	PickupHandoverNotes  string     `gorm:"type:text"`
-	PickupHandoverAt     *time.Time `gorm:"type:timestamptz"`
-	ReturnOdometerKM     *int       `gorm:"type:integer"`
-	ReturnFuelPercent    *int       `gorm:"type:smallint"`
-	ReturnHandoverNotes  string     `gorm:"type:text"`
-	ReturnHandoverAt     *time.Time `gorm:"type:timestamptz"`
+	// Owner records vehicle handover when keys are given (before customer drives).
+	OwnerPickupOdometerKM    *int       `gorm:"type:integer"`
+	OwnerPickupFuelPercent   *int       `gorm:"type:smallint"`
+	OwnerPickupHandoverNotes string     `gorm:"type:text"`
+	OwnerPickupHandoverAt    *time.Time `gorm:"type:timestamptz"`
+
+	// Customer pickup check-in after accepting the owner's handover record.
+	CustomerPickupAcceptedAt *time.Time `gorm:"type:timestamptz"`
+	PickupOdometerKM         *int       `gorm:"type:integer"`
+	PickupFuelPercent        *int       `gorm:"type:smallint"`
+	PickupHandoverNotes      string     `gorm:"type:text"`
+	PickupHandoverAt         *time.Time `gorm:"type:timestamptz"`
+	// Customer return check-in when handing the vehicle back.
+	ReturnOdometerKM    *int       `gorm:"type:integer"`
+	ReturnFuelPercent   *int       `gorm:"type:smallint"`
+	ReturnHandoverNotes string     `gorm:"type:text"`
+	ReturnHandoverAt    *time.Time `gorm:"type:timestamptz"`
+
+	// Owner confirms return after the customer has paid the final balance.
+	OwnerReturnAcceptedAt *time.Time `gorm:"type:timestamptz"`
 
 	CreatedAt time.Time
 	UpdatedAt time.Time
@@ -92,6 +108,7 @@ type Booking struct {
 	Messages          []Message
 	Reviews           []BookingReview           `gorm:"foreignKey:BookingID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 	PostTripCharges   []BookingPostTripCharge `gorm:"foreignKey:BookingID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
+	HandoverPhotos    []BookingHandoverPhoto  `gorm:"foreignKey:BookingID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE"`
 }
 
 func (b *Booking) BeforeCreate(tx *gorm.DB) error {

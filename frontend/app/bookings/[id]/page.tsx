@@ -7,6 +7,16 @@ import { apiJson, ApiError } from "@/lib/api";
 import { getToken, getUser } from "@/lib/session";
 import type { Booking, Message } from "@/lib/apitypes";
 import { PageLoader } from "@/components/loaders";
+import {
+  HandoverPhotoField,
+  uploadPendingHandoverPhotos,
+  type HandoverPhotoStep,
+} from "@/components/HandoverPhotoField";
+import { BookingSummaryCard } from "@/components/BookingSummaryCard";
+import { PostTripChargesSummary } from "@/components/PostTripChargesSummary";
+import { isTripActive, isTripCompleted } from "@/lib/bookingStatus";
+import { NegotiationPricePreview } from "@/components/NegotiationPricePreview";
+import { endDateAfterStartChange, localDateInputValue, tripDaysInclusive } from "@/lib/rentalDates";
 
 export default function BookingChatPage() {
   const params = useParams<{ id: string }>();
@@ -40,6 +50,11 @@ export default function BookingChatPage() {
   const [reviewComment, setReviewComment] = useState("");
   const [chargeDrafts, setChargeDrafts] = useState<{ label: string; amount: string }[]>([{ label: "", amount: "" }]);
   const [settlementBusy, setSettlementBusy] = useState(false);
+
+  const ownerPickupPhotosRef = useRef<File[]>([]);
+  const customerPickupPhotosRef = useRef<File[]>([]);
+  const customerReturnPhotosRef = useRef<File[]>([]);
+  const ownerReturnPhotosRef = useRef<File[]>([]);
 
   const loadBooking = useCallback(async () => {
     if (!getToken() || !id) return;
@@ -131,6 +146,19 @@ export default function BookingChatPage() {
     setTripDrop(booking.drop_point);
   }, [booking]);
 
+  const lastPostTripItemsKey = useRef("");
+
+  useEffect(() => {
+    const items = booking?.payment?.post_trip_items;
+    if (!items) return;
+    const key = items.map((i) => `${i.label}\0${i.amount_inr}`).join("\n");
+    if (key === lastPostTripItemsKey.current) return;
+    lastPostTripItemsKey.current = key;
+    if (items.length > 0) {
+      setChargeDrafts(items.map((i) => ({ label: i.label, amount: i.amount_inr })));
+    }
+  }, [booking?.payment?.post_trip_items]);
+
   function toStartOfDayUTC(dateStr: string) {
     return `${dateStr}T00:00:00.000Z`;
   }
@@ -202,10 +230,25 @@ export default function BookingChatPage() {
         method: "PATCH",
         body: JSON.stringify({ final_booking_price: price.trim() }),
       });
-      setInfo("Final price updated. The customer will see it within a few seconds. Set the price, then confirm the booking when you are ready.");
+      setInfo(
+        "Quoted price saved. The customer must accept it in chat before you can confirm the booking.",
+      );
       await loadBooking();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not update price");
+    }
+  }
+
+  async function acceptQuotedPrice() {
+    if (!id) return;
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await apiJson<{ booking: Booking }>(`/bookings/${id}/accept-price`, { method: "POST" });
+      setBooking(res.booking);
+      setInfo("You accepted the quoted price. The owner can now confirm the booking.");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not accept price");
     }
   }
 
@@ -252,8 +295,20 @@ export default function BookingChatPage() {
     }
   }
 
+  async function flushHandoverPhotos(step: HandoverPhotoStep, filesRef: React.MutableRefObject<File[]>) {
+    if (!id || filesRef.current.length === 0) return;
+    const files = [...filesRef.current];
+    filesRef.current = [];
+    try {
+      const updated = await uploadPendingHandoverPhotos(id, step, files);
+      if (updated) setBooking(updated);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not upload photos");
+    }
+  }
+
   async function submitHandover(phase: "pickup" | "return") {
-    if (!id) return;
+    if (!id || !booking) return;
     const odom = phase === "pickup" ? pickupOdom.trim() : returnOdom.trim();
     const n = parseInt(odom, 10);
     if (!Number.isFinite(n) || n <= 0) {
@@ -283,7 +338,25 @@ export default function BookingChatPage() {
         }),
       });
       setBooking(res.booking);
-      setInfo(phase === "pickup" ? "Pickup handover saved." : "Return handover saved.");
+      const me = getUser();
+      const actingOwner = me?.id === booking.owner_id;
+      const actingCustomer = me?.id === booking.customer_id;
+      if (phase === "pickup") {
+        if (actingOwner) await flushHandoverPhotos("owner_pickup", ownerPickupPhotosRef);
+        if (actingCustomer) await flushHandoverPhotos("customer_pickup", customerPickupPhotosRef);
+        const ownerDone = !!res.booking.handover?.owner_pickup_recorded_at;
+        const customerDone = !!res.booking.handover?.pickup_recorded_at;
+        if (customerDone) setInfo("Pickup check-in saved.");
+        else if (ownerDone) setInfo("Vehicle handover recorded.");
+        else setInfo("Pickup handover saved.");
+      } else {
+        if (actingCustomer) await flushHandoverPhotos("customer_return", customerReturnPhotosRef);
+        if (res.booking.handover?.owner_return_accepted_at) {
+          setInfo("Return accepted — trip complete.");
+        } else {
+          setInfo("Return check-in saved.");
+        }
+      }
       if (phase === "pickup") {
         setPickupOdom("");
         setPickupFuel("");
@@ -295,6 +368,28 @@ export default function BookingChatPage() {
       }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Could not save handover");
+    }
+  }
+
+  async function submitOwnerAcceptReturn() {
+    if (!id || !booking?.handover?.return_odometer_km) return;
+    setError(null);
+    setInfo(null);
+    try {
+      const res = await apiJson<{ booking: Booking }>(`/bookings/${id}/handover`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          phase: "return",
+          odometer_km: booking.handover.return_odometer_km,
+          fuel_percent: booking.handover.return_fuel_percent ?? null,
+          notes: "",
+        }),
+      });
+      setBooking(res.booking);
+      await flushHandoverPhotos("owner_return", ownerReturnPhotosRef);
+      setInfo("Return accepted — trip complete.");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Could not accept return");
     }
   }
 
@@ -362,12 +457,31 @@ export default function BookingChatPage() {
   const myReviewParty = isCustomer ? "CUSTOMER" : isOwner ? "OWNER" : "";
   const hasMyReview = booking.reviews?.some((r) => r.party === myReviewParty) ?? false;
   const canPostReview =
-    booking.status === "CONFIRMED" &&
+    isTripActive(booking.status) &&
     isFullyPaid &&
     rentalEnded &&
     (isCustomer || isOwner) &&
     !hasMyReview;
-  const showHandover = booking.status === "CONFIRMED";
+  const depositPaidForHandover =
+    payStatus === "DEPOSIT_PAID" || payStatus === "FINAL_DUE" || payStatus === "PAID";
+  const showHandover = isTripActive(booking.status) && depositPaidForHandover;
+  const tripStageLabel = booking.trip_stage_label?.trim() ?? "";
+  const ownerHandoverDone = !!booking.handover?.owner_pickup_recorded_at;
+  const customerPickupDone = !!booking.handover?.pickup_recorded_at;
+  const pickupComplete = ownerHandoverDone && customerPickupDone;
+  const customerReturnDone = !!booking.handover?.return_recorded_at;
+  const ownerReturnAccepted = !!booking.handover?.owner_return_accepted_at;
+  const returnComplete = customerReturnDone && ownerReturnAccepted;
+  const showOwnerHandoverForm = showHandover && !ownerHandoverDone && isOwner;
+  const showCustomerAwaitingOwner =
+    showHandover && !ownerHandoverDone && isCustomer;
+  const showHandoverCard = showHandover && ownerHandoverDone;
+  const handoverPhotos = booking?.handover?.photos ?? [];
+  const tripDays = tripDaysInclusive(booking.rental_from, booking.rental_to);
+  const postTripInr = Number(booking.payment?.post_trip_charges_inr ?? 0);
+  const customerTripTotalInr = booking.payment
+    ? (Number(booking.payment.customer_total_inr) + (Number.isFinite(postTripInr) ? postTripInr : 0)).toFixed(2)
+    : null;
   const showWithdrawBlock = isCustomer && canWithdraw;
   const showCancelBlock = canCancelBooking && (isOwner || isCustomer) && !showWithdrawBlock;
   const customerNeedsDeposit =
@@ -379,8 +493,19 @@ export default function BookingChatPage() {
     booking.status === "CONFIRMED" &&
     (payStatus === "DEPOSIT_PAID" || payStatus === "FINAL_DUE") &&
     payStatus !== "PAID" &&
-    rentalEnded &&
-    !!booking.handover?.return_recorded_at;
+    customerReturnDone;
+  const customerPriceAccepted = !!booking.customer_price_accepted;
+  const canCustomerAcceptPrice =
+    isCustomer &&
+    (booking.status === "PENDING" || booking.status === "NEGOTIATING") &&
+    !!booking.final_booking_price &&
+    !customerPriceAccepted;
+  const ownerCanConfirm =
+    isOwner &&
+    !!booking.final_booking_price &&
+    customerPriceAccepted &&
+    booking.status !== "CONFIRMED" &&
+    booking.status !== "CANCELLED";
 
   function cancelTripEdit() {
     setTripEditorUserOpen(false);
@@ -397,15 +522,13 @@ export default function BookingChatPage() {
         <div className="min-w-0 space-y-4">
           <div>
             <h1 className="text-xl font-semibold sm:text-2xl">Booking</h1>
-            <p className="text-sm break-words text-slate-600">
-              {booking.car.car_name} · {booking.car.car_model} ({booking.car.car_number}) ·{" "}
-              <span className="font-medium text-slate-900">{booking.status}</span>
-            </p>
-            {booking.final_booking_price && (
-              <p className="text-sm text-slate-700">
-                Final agreed price: <span className="font-semibold">₹{booking.final_booking_price}</span>
-              </p>
-            )}
+            <BookingSummaryCard
+              booking={booking}
+              tripDays={tripDays}
+              customerTripTotalInr={customerTripTotalInr}
+              postTripInr={postTripInr}
+              viewerRole={isOwner ? "owner" : isCustomer ? "customer" : null}
+            />
             {customerNeedsDeposit && (
               <p className="mt-2">
                 <Link
@@ -429,56 +552,37 @@ export default function BookingChatPage() {
             {isCustomer &&
               booking.status === "CONFIRMED" &&
               payStatus === "DEPOSIT_PAID" &&
-              payPhase === "awaiting_settlement" && (
+              payPhase === "awaiting_settlement" &&
+              customerReturnDone && (
                 <p className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                  Deposit paid. Waiting for the owner to submit post-trip charges (tolls, fines, damage, etc.). You will
-                  get a <strong>Pay final balance</strong> button here when the bill is ready.
+                  Deposit paid and return logged. Waiting for the owner to submit post-trip charges (tolls, fines,
+                  damage, etc.). You will get a <strong>Pay final balance</strong> button when the bill is ready.
                 </p>
               )}
-            {isOwner && booking.status === "CONFIRMED" && booking.payment && (
-              <div className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
-                <p className="font-medium text-slate-900">Your payout</p>
-                <ul className="mt-2 space-y-2">
-                  <li className="flex justify-between gap-4">
-                    <span>Negotiated price (rental)</span>
-                    <span className="shrink-0 font-medium tabular-nums text-slate-900">
-                      ₹{booking.payment.agreed_base_inr}
-                    </span>
-                  </li>
-                  <li className="flex justify-between gap-4">
-                    <span>Platform fee ({booking.payment.owner_commission_percent}%)</span>
-                    <span className="shrink-0 tabular-nums text-slate-800">
-                      − ₹{booking.payment.owner_commission_inr}
-                    </span>
-                  </li>
-                  <li className="flex justify-between gap-4">
-                    <span>GST ({booking.payment.gst_percent_on_commission}% on negotiated rental)</span>
-                    <span className="shrink-0 tabular-nums text-slate-800">
-                      − ₹{booking.payment.owner_gst_inr}
-                    </span>
-                  </li>
-                  <li className="flex justify-between gap-4 border-t border-slate-200 pt-2 text-base font-semibold text-slate-900">
-                    <span>Rental payout (after platform fees)</span>
-                    <span className="shrink-0 tabular-nums text-emerald-900">₹{booking.payment.owner_net_inr}</span>
-                  </li>
-                  {!isFullyPaid && booking.payment.owner_projected_payout_inr && (
-                    <li className="flex justify-between gap-4 text-sm text-slate-600">
-                      <span>Projected total after final pay (incl. post-trip you add)</span>
-                      <span className="shrink-0 tabular-nums text-slate-800">
-                        ₹{booking.payment.owner_projected_payout_inr}
-                      </span>
-                    </li>
-                  )}
-                </ul>
-                {isFullyPaid && (
-                  <p className="mt-2 text-xs text-slate-600">
-                    Customer has completed payment
-                    {booking.payment.payment_method ? ` (${booking.payment.payment_method})` : ""}.
-                  </p>
-                )}
-              </div>
+            {isOwner &&
+              booking.status === "CONFIRMED" &&
+              payStatus === "UNPAID" &&
+              booking.payment && (
+                <p className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <span className="font-medium text-slate-900">Next for you:</span> Wait for the customer to pay the trip
+                  deposit. Pickup &amp; return handover will appear here after that.
+                </p>
+              )}
+            {isCustomer &&
+              booking.status === "CONFIRMED" &&
+              payStatus === "UNPAID" &&
+              booking.payment && (
+                <p className="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <span className="font-medium text-slate-900">Next for you:</span> Pay the deposit below to lock the
+                  booking. Pickup &amp; return handover unlocks after payment.
+                </p>
+              )}
+            {isTripActive(booking.status) && booking.payment && (isCustomer || isOwner) && (
+              <PostTripChargesSummary
+                payment={booking.payment}
+                variant={isCustomer ? "customer" : "owner"}
+              />
             )}
-            <p className="text-xs text-slate-500">This page refreshes booking and chat every 2 seconds.</p>
             {showTripEditor ? (
               <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <h2 className="font-medium text-slate-900">
@@ -495,8 +599,13 @@ export default function BookingChatPage() {
                     <input
                       type="date"
                       className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      min={localDateInputValue()}
                       value={tripFrom}
-                      onChange={(e) => setTripFrom(e.target.value)}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setTripFrom(next);
+                        setTripTo((prev) => endDateAfterStartChange(next, prev));
+                      }}
                     />
                   </div>
                   <div>
@@ -504,6 +613,7 @@ export default function BookingChatPage() {
                     <input
                       type="date"
                       className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                      min={tripFrom || localDateInputValue()}
                       value={tripTo}
                       onChange={(e) => setTripTo(e.target.value)}
                     />
@@ -544,28 +654,9 @@ export default function BookingChatPage() {
                   )}
                 </div>
               </div>
-            ) : (
-              <div className="mt-4 space-y-3">
-                <div className="rounded-lg border border-slate-200 bg-slate-50/80 p-3 text-sm text-slate-700">
-                  <p>
-                    <span className="font-medium text-slate-900">Rental:</span>{" "}
-                    {new Date(booking.rental_from).toLocaleString()} → {new Date(booking.rental_to).toLocaleString()}
-                  </p>
-                  <p className="mt-1">
-                    <span className="font-medium text-slate-900">Pickup:</span>{" "}
-                    {booking.pickup_point.trim() ? (
-                      booking.pickup_point
-                    ) : (
-                      <span className="text-slate-500">Not set</span>
-                    )}
-                  </p>
-                  <p className="mt-1">
-                    <span className="font-medium text-slate-900">Return:</span>{" "}
-                    {booking.drop_point.trim() ? booking.drop_point : <span className="text-slate-500">Not set</span>}
-                  </p>
-                </div>
-                {canEditTrip && (
-                  <button
+            ) : canEditTrip ? (
+              <div className="mt-4">
+                <button
                     type="button"
                     onClick={() => {
                       setTripEditorUserOpen(true);
@@ -575,9 +666,8 @@ export default function BookingChatPage() {
                   >
                     Edit trip details
                   </button>
-                )}
               </div>
-            )}
+            ) : null}
           </div>
 
           {error && (
@@ -589,12 +679,45 @@ export default function BookingChatPage() {
             </div>
           )}
 
+          {canCustomerAcceptPrice && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm">
+              <h2 className="font-medium text-emerald-950">Accept quoted price</h2>
+              <p className="mt-1 text-sm text-emerald-900/90">
+                The owner quoted <strong>₹{booking.final_booking_price} per day</strong> (exclusive of platform fee and
+                GST). Accept when you are happy with this amount so they can confirm the trip. You can still chat to
+                negotiate before accepting.
+              </p>
+              <NegotiationPricePreview booking={booking} tripDays={tripDays} variant="customer" />
+              <button
+                type="button"
+                onClick={() => void acceptQuotedPrice()}
+                className="mt-3 min-h-[44px] rounded-md bg-emerald-700 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-800"
+              >
+                I accept ₹{booking.final_booking_price}/day
+              </button>
+            </div>
+          )}
+          {isCustomer &&
+            customerPriceAccepted &&
+            (booking.status === "PENDING" || booking.status === "NEGOTIATING") && (
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                <p>
+                  You accepted the quoted price of <strong>₹{booking.final_booking_price} per day</strong>
+                  {booking.customer_accepted_price_at
+                    ? ` on ${new Date(booking.customer_accepted_price_at).toLocaleString()}`
+                    : ""}
+                  . Waiting for the owner to confirm the booking.
+                </p>
+                <NegotiationPricePreview booking={booking} tripDays={tripDays} variant="customer" />
+              </div>
+            )}
+
           {isOwner && booking.status !== "CONFIRMED" && booking.status !== "CANCELLED" && (
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="font-medium">Final price & confirmation</h2>
               <p className="text-sm text-slate-600">
-                Set the agreed amount, then confirm the booking. Only you can confirm; the customer cannot confirm on
-                your behalf.
+                Set your quoted amount <strong>per day</strong>, exclusive of platform fee and GST. The customer must
+                accept it before you can confirm. Only you can confirm the booking.
               </p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                 <input
@@ -611,14 +734,34 @@ export default function BookingChatPage() {
                   Save price
                 </button>
               </div>
-              <button
-                type="button"
-                disabled={!booking.final_booking_price}
-                onClick={() => void confirm()}
-                className="mt-4 min-h-[44px] w-full rounded-md bg-emerald-700 px-4 py-2 text-sm text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-h-0"
-              >
-                Confirm booking
-              </button>
+              {booking.final_booking_price && (
+                <NegotiationPricePreview booking={booking} tripDays={tripDays} variant="owner" />
+              )}
+              {booking.final_booking_price && !customerPriceAccepted && (
+                <p className="mt-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                  Waiting for the customer to accept your quote of <strong>₹{booking.final_booking_price} per day</strong>
+                  .
+                  Confirm will unlock after they accept (chat is still open if they want changes).
+                </p>
+              )}
+              {customerPriceAccepted && (
+                <p className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                  Customer accepted <strong>₹{booking.final_booking_price} per day</strong>
+                  {booking.customer_accepted_price_at
+                    ? ` on ${new Date(booking.customer_accepted_price_at).toLocaleString()}`
+                    : ""}
+                  . You can confirm the booking now.
+                </p>
+              )}
+              {ownerCanConfirm && (
+                <button
+                  type="button"
+                  onClick={() => void confirm()}
+                  className="mt-4 min-h-[44px] w-full rounded-md bg-emerald-700 px-4 py-2 text-sm text-white hover:bg-emerald-800 sm:w-auto sm:min-h-0"
+                >
+                  Confirm booking
+                </button>
+              )}
             </div>
           )}
 
@@ -680,25 +823,165 @@ export default function BookingChatPage() {
             </div>
           )}
 
-          {showHandover && (
+          {showCustomerAwaitingOwner && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 shadow-sm">
+              <h2 className="font-medium text-slate-900">Awaiting vehicle handover</h2>
+              <p className="mt-2 text-sm text-slate-700">
+                Your deposit is paid. The owner will record odometer and condition when they hand you the keys. You will
+                then confirm pickup check-in here before driving off.
+              </p>
+            </div>
+          )}
+
+          {showOwnerHandoverForm && (
+            <div className="rounded-lg border border-sky-200 bg-white p-4 shadow-sm">
+              <h2 className="font-medium text-slate-900">Vehicle handover (owner)</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                When you hand over the keys, log odometer and optional fuel level. The customer must accept this record
+                before the trip starts.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <label className="text-sm text-slate-700">
+                  Odometer (km)
+                  <input
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    inputMode="numeric"
+                    value={pickupOdom}
+                    onChange={(e) => setPickupOdom(e.target.value)}
+                  />
+                </label>
+                <label className="text-sm text-slate-700">
+                  Fuel % (optional)
+                  <input
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    inputMode="numeric"
+                    value={pickupFuel}
+                    onChange={(e) => setPickupFuel(e.target.value)}
+                  />
+                </label>
+                <label className="sm:col-span-2 text-sm text-slate-700">
+                  Notes
+                  <input
+                    className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    value={pickupNotesH}
+                    onChange={(e) => setPickupNotesH(e.target.value)}
+                  />
+                </label>
+                {id ? (
+                  <HandoverPhotoField
+                    bookingId={id}
+                    step="owner_pickup"
+                    photos={handoverPhotos}
+                    pendingRef={ownerPickupPhotosRef}
+                  />
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => void submitHandover("pickup")}
+                  className="sm:col-span-2 min-h-[44px] rounded-md bg-sky-900 px-4 py-2 text-sm text-white hover:bg-sky-800"
+                >
+                  Record vehicle handover
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showHandoverCard && (
             <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
               <h2 className="font-medium text-slate-900">Pickup & return handover</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Record odometer (required) and optional fuel % and notes once at pickup and once at return. Either party
-                can submit.
-              </p>
-              {booking.handover?.pickup_recorded_at ? (
+              {isCustomer && (
+                <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50/80 px-3 py-3 text-sm text-emerald-950">
+                  <p className="font-medium">Your next step (customer)</p>
+                  {!customerPickupDone && (
+                    <p className="mt-1 text-emerald-900/90">
+                      The owner logged handover at{" "}
+                      {booking.handover?.owner_pickup_recorded_at
+                        ? new Date(booking.handover.owner_pickup_recorded_at).toLocaleString()
+                        : "pickup"}
+                      . Verify odometer and condition, then submit your pickup check-in before you drive off.
+                    </p>
+                  )}
+                  {pickupComplete && !customerReturnDone && (
+                    <p className="mt-1 text-emerald-900/90">
+                      When you return the car, log return odometer (and fuel if you want). The owner will bill any extras
+                      and must confirm return after you pay the final balance.
+                    </p>
+                  )}
+                  {customerReturnDone && !isFullyPaid && (
+                    <p className="mt-1 text-emerald-900/90">
+                      Return is logged. After the rental ends, the owner may add post-trip charges; pay the final balance
+                      when the bill is ready.
+                    </p>
+                  )}
+                  {customerReturnDone && isFullyPaid && !ownerReturnAccepted && (
+                    <p className="mt-1 text-emerald-900/90">
+                      Final payment received. Waiting for the owner to accept your return and close the trip.
+                    </p>
+                  )}
+                  {returnComplete && (
+                    <p className="mt-1 text-emerald-900/90">
+                      Trip is complete. You can leave a review after the rental end date.
+                    </p>
+                  )}
+                </div>
+              )}
+              {isOwner && (
+                <div className="mt-3 rounded-md border border-sky-200 bg-sky-50/80 px-3 py-3 text-sm text-sky-950">
+                  <p className="font-medium">Your next step (owner)</p>
+                  {!customerPickupDone && (
+                    <p className="mt-1 text-sky-900/90">
+                      Waiting for the customer to confirm pickup check-in against your handover record.
+                    </p>
+                  )}
+                  {pickupComplete && !customerReturnDone && (
+                    <p className="mt-1 text-sky-900/90">
+                      Waiting for the customer to log return check-in when they bring the car back.
+                    </p>
+                  )}
+                  {customerReturnDone && !isFullyPaid && !ownerReturnAccepted && payStatus !== "FINAL_DUE" && (
+                    <p className="mt-1 text-sky-900/90">
+                      Customer return is logged. Add any tolls, fines, or damage in <strong>Post-trip charges</strong> below
+                      (use an empty list if there are none). The customer can pay the final balance once you submit.
+                    </p>
+                  )}
+                  {customerReturnDone && payStatus === "FINAL_DUE" && !isFullyPaid && (
+                    <p className="mt-1 text-sky-900/90">
+                      Post-trip bill sent. You can revise charges below until the customer pays the final balance.
+                    </p>
+                  )}
+                  {customerReturnDone && isFullyPaid && !ownerReturnAccepted && (
+                    <p className="mt-1 text-sky-900/90">
+                      Final payment received. Review the customer&apos;s return record below and accept it to complete the
+                      trip.
+                    </p>
+                  )}
+                  {returnComplete && (
+                    <p className="mt-1 text-sky-900/90">Return accepted — this trip is complete.</p>
+                  )}
+                </div>
+              )}
+              {booking.handover?.owner_pickup_recorded_at && (
                 <p className="mt-3 text-sm text-slate-700">
-                  Pickup logged{" "}
-                  {booking.handover.pickup_odometer_km != null && booking.handover.pickup_odometer_km !== undefined
-                    ? `· ${booking.handover.pickup_odometer_km} km`
+                  Owner handover{" "}
+                  {booking.handover.owner_pickup_odometer_km != null
+                    ? `· ${booking.handover.owner_pickup_odometer_km} km`
                     : ""}
-                  {booking.handover.pickup_fuel_percent != null && booking.handover.pickup_fuel_percent !== undefined
+                  {booking.handover.owner_pickup_fuel_percent != null
+                    ? ` · fuel ${booking.handover.owner_pickup_fuel_percent}%`
+                    : ""}{" "}
+                  · {new Date(booking.handover.owner_pickup_recorded_at).toLocaleString()}
+                </p>
+              )}
+              {customerPickupDone ? (
+                <p className="mt-2 text-sm text-slate-700">
+                  Customer pickup check-in{" "}
+                  {booking.handover?.pickup_odometer_km != null ? `· ${booking.handover.pickup_odometer_km} km` : ""}
+                  {booking.handover?.pickup_fuel_percent != null
                     ? ` · fuel ${booking.handover.pickup_fuel_percent}%`
                     : ""}{" "}
-                  · {new Date(booking.handover.pickup_recorded_at).toLocaleString()}
+                  · {new Date(booking.handover!.pickup_recorded_at!).toLocaleString()}
                 </p>
-              ) : (
+              ) : isCustomer ? (
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   <label className="text-sm text-slate-700">
                     Odometer (km)
@@ -726,31 +1009,37 @@ export default function BookingChatPage() {
                       onChange={(e) => setPickupNotesH(e.target.value)}
                     />
                   </label>
+                  {id ? (
+                    <HandoverPhotoField
+                      bookingId={id}
+                      step="customer_pickup"
+                      photos={handoverPhotos}
+                      pendingRef={customerPickupPhotosRef}
+                    />
+                  ) : null}
                   <button
                     type="button"
                     onClick={() => void submitHandover("pickup")}
-                    className="sm:col-span-2 min-h-[44px] rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
+                    className="sm:col-span-2 min-h-[44px] rounded-md bg-emerald-800 px-4 py-2 text-sm text-white hover:bg-emerald-900"
                   >
-                    Save pickup handover
+                    Confirm pickup check-in
                   </button>
                 </div>
-              )}
-              {booking.handover?.pickup_recorded_at && (
+              ) : null}
+              {pickupComplete && (
               <>
-              {booking.handover?.return_recorded_at ? (
+              {customerReturnDone ? (
                 <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-700">
-                  Return logged{" "}
-                  {booking.handover.return_odometer_km != null && booking.handover.return_odometer_km !== undefined
-                    ? `· ${booking.handover.return_odometer_km} km`
-                    : ""}
-                  {booking.handover.return_fuel_percent != null && booking.handover.return_fuel_percent !== undefined
-                    ? ` · fuel ${booking.handover.return_fuel_percent}%`
+                  Customer return{" "}
+                  {booking.handover!.return_odometer_km != null ? `· ${booking.handover!.return_odometer_km} km` : ""}
+                  {booking.handover!.return_fuel_percent != null
+                    ? ` · fuel ${booking.handover!.return_fuel_percent}%`
                     : ""}{" "}
-                  · {new Date(booking.handover.return_recorded_at).toLocaleString()}
+                  · {new Date(booking.handover!.return_recorded_at!).toLocaleString()}
                 </p>
-              ) : (
+              ) : isCustomer ? (
                 <div className="mt-4 border-t border-slate-100 pt-4">
-                  <p className="text-sm font-medium text-slate-800">Return check-in</p>
+                  <p className="text-sm font-medium text-slate-800">Return check-in (customer)</p>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     <label className="text-sm text-slate-700">
                       Odometer (km)
@@ -778,14 +1067,46 @@ export default function BookingChatPage() {
                         onChange={(e) => setReturnNotesH(e.target.value)}
                       />
                     </label>
+                    {id ? (
+                      <HandoverPhotoField
+                        bookingId={id}
+                        step="customer_return"
+                        photos={handoverPhotos}
+                        pendingRef={customerReturnPhotosRef}
+                      />
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => void submitHandover("return")}
-                      className="sm:col-span-2 min-h-[44px] rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
+                      className="sm:col-span-2 min-h-[44px] rounded-md bg-emerald-800 px-4 py-2 text-sm text-white hover:bg-emerald-900"
                     >
-                      Save return handover
+                      Save return check-in
                     </button>
                   </div>
+                </div>
+              ) : null}
+              {ownerReturnAccepted && booking.handover?.owner_return_accepted_at && (
+                <p className="mt-2 text-sm text-slate-700">
+                  Owner accepted return · {new Date(booking.handover.owner_return_accepted_at).toLocaleString()}
+                </p>
+              )}
+              {isOwner && customerReturnDone && isFullyPaid && !ownerReturnAccepted && (
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  {id ? (
+                    <HandoverPhotoField
+                      bookingId={id}
+                      step="owner_return"
+                      photos={handoverPhotos}
+                      pendingRef={ownerReturnPhotosRef}
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void submitOwnerAcceptReturn()}
+                    className="mt-3 min-h-[44px] rounded-md bg-sky-900 px-4 py-2 text-sm font-medium text-white hover:bg-sky-800"
+                  >
+                    Accept return &amp; complete trip
+                  </button>
                 </div>
               )}
               </>
@@ -797,7 +1118,7 @@ export default function BookingChatPage() {
             <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 shadow-sm">
               <h2 className="font-medium text-amber-950">Post-trip charges</h2>
               <p className="mt-1 text-sm text-amber-900/90">
-                The rental window has ended and return handover is logged. Add documented costs (for example Fastag /
+                The customer logged return. Add documented costs (for example Fastag /
                 tolls, traffic fines, scratches or other damage). The customer&apos;s final bill is the remaining trip
                 balance plus these lines. You can revise this list until they pay the final balance.
               </p>
@@ -924,7 +1245,12 @@ export default function BookingChatPage() {
 
         <aside className="min-w-0 lg:sticky lg:top-20 lg:self-start">
           <div className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:max-h-[calc(100dvh-5.5rem)] lg:min-h-[min(30rem,calc(100dvh-5.5rem))]">
-            <h2 className="shrink-0 font-medium">Chat</h2>
+            <div className="shrink-0">
+              <h2 className="font-medium">{tripStageLabel || "Chat"}</h2>
+              {tripStageLabel ? (
+                <p className="mt-0.5 text-xs text-slate-500">Messages with your booking partner</p>
+              ) : null}
+            </div>
             <div className="mt-3 flex min-h-0 flex-1 flex-col">
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto rounded-md bg-slate-50 p-3 text-sm max-h-[min(22rem,55dvh)] lg:max-h-full">
                 {messages.map((m) => {
@@ -955,12 +1281,18 @@ export default function BookingChatPage() {
               <div className="mt-3 flex min-w-0 shrink-0 gap-2">
                 <input
                   className="min-h-[44px] min-w-0 flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500"
-                  placeholder={booking.status === "CANCELLED" ? "Chat closed (booking cancelled)" : "Type a message"}
+                  placeholder={
+                    booking.status === "CANCELLED"
+                      ? "Chat closed (booking cancelled)"
+                      : isTripCompleted(booking.status)
+                        ? "Chat closed (trip completed)"
+                        : "Type a message"
+                  }
                   value={text}
-                  disabled={booking.status === "CANCELLED"}
+                  disabled={booking.status === "CANCELLED" || isTripCompleted(booking.status)}
                   onChange={(e) => setText(e.target.value)}
                   onKeyDown={(e) => {
-                    if (booking.status === "CANCELLED") return;
+                    if (booking.status === "CANCELLED" || isTripCompleted(booking.status)) return;
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
                       void sendMessage();
@@ -969,7 +1301,7 @@ export default function BookingChatPage() {
                 />
                 <button
                   type="button"
-                  disabled={booking.status === "CANCELLED"}
+                  disabled={booking.status === "CANCELLED" || isTripCompleted(booking.status)}
                   onClick={() => void sendMessage()}
                   className="min-h-[44px] shrink-0 rounded-md bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800 disabled:opacity-50"
                 >

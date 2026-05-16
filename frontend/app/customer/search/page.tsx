@@ -8,6 +8,7 @@ import type { Car } from "@/lib/apitypes";
 import type { User } from "@/lib/session";
 import { PaginationBar } from "@/components/PaginationBar";
 import { ButtonCarSpinner, SearchResultsSkeleton } from "@/components/loaders";
+import { endDateAfterStartChange, localDateInputValue } from "@/lib/rentalDates";
 
 function isOwnCar(user: User | null, car: Car): boolean {
   return !!user && user.id === car.owner_id;
@@ -101,7 +102,7 @@ export default function CustomerSearchPage() {
     }
     setError(null);
     setBookingCar(car);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateInputValue();
     setRentalFrom(today);
     setRentalTo(today);
     setPickupPoint("");
@@ -288,10 +289,13 @@ export default function CustomerSearchPage() {
                   <input
                     type="date"
                     className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    min={localDateInputValue()}
                     value={rentalFrom}
                     onChange={(e) => {
                       setError(null);
-                      setRentalFrom(e.target.value);
+                      const next = e.target.value;
+                      setRentalFrom(next);
+                      setRentalTo((prev) => endDateAfterStartChange(next, prev));
                     }}
                   />
                 </div>
@@ -300,6 +304,7 @@ export default function CustomerSearchPage() {
                   <input
                     type="date"
                     className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                    min={rentalFrom || localDateInputValue()}
                     value={rentalTo}
                     onChange={(e) => {
                       setError(null);

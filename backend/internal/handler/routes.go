@@ -69,6 +69,7 @@ func RegisterWithDeps(r *gin.RouterGroup, d Deps) {
 			custBook.POST("/bookings", bookH.Create)
 			custBook.PATCH("/bookings/:id/trip", bookH.PatchTrip)
 			custBook.POST("/bookings/:id/withdraw", bookH.Withdraw)
+			custBook.POST("/bookings/:id/accept-price", bookH.AcceptQuotedPrice)
 			custBook.GET("/bookings/:id/payment-preview", bookH.PaymentPreview)
 			custBook.POST("/bookings/:id/pay", bookH.Pay)
 		}
@@ -79,6 +80,7 @@ func RegisterWithDeps(r *gin.RouterGroup, d Deps) {
 		au.POST("/bookings/:id/messages", bookH.PostMessage)
 		au.POST("/bookings/:id/cancel", bookH.Cancel)
 		au.PATCH("/bookings/:id/handover", bookH.PatchHandover)
+		au.POST("/bookings/:id/handover/photos", bookH.UploadHandoverPhoto)
 		au.POST("/bookings/:id/reviews", bookH.PostReview)
 
 		ownerPrice := au.Group("")

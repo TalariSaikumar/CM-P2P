@@ -72,6 +72,9 @@ func (d *DB) GetBookingByID(ctx context.Context, id uuid.UUID) (*models.Booking,
 			return db.Order("booking_reviews.created_at asc")
 		}).
 		Preload("Reviews.Reviewer").
+		Preload("HandoverPhotos", func(db *gorm.DB) *gorm.DB {
+			return db.Order("booking_handover_photos.created_at asc")
+		}).
 		First(&b, "id = ?", id).Error; err != nil {
 		return nil, err
 	}

@@ -236,6 +236,33 @@ func (h *BookingHandler) Confirm(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
 }
 
+func (h *BookingHandler) AcceptQuotedPrice(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	b, err := h.Svc.CustomerAcceptQuotedPrice(c.Request.Context(), uid, bid)
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
+}
+
 func (h *BookingHandler) PatchTrip(c *gin.Context) {
 	idStr, ok := middleware.UserID(c)
 	if !ok {
@@ -437,6 +464,74 @@ func (h *BookingHandler) PatchHandover(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"booking": toBookingPublic(b, h.Svc)})
+}
+
+func (h *BookingHandler) UploadHandoverPhoto(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	stepStr := c.PostForm("step")
+	if stepStr == "" {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Field \"step\" is required.")
+		return
+	}
+	step, err := service.ParseHandoverPhotoStep(stepStr)
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	fh, err := c.FormFile("file")
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "A file field named \"file\" is required.")
+		return
+	}
+	src, err := fh.Open()
+	if err != nil {
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	defer src.Close()
+	ct := fh.Header.Get("Content-Type")
+	if ct == "" {
+		ct = "application/octet-stream"
+	}
+	p, err := h.Svc.UploadHandoverPhoto(c.Request.Context(), uid, bid, step, fh.Filename, ct, src)
+	if httpx.AbortService(c, err) {
+		return
+	}
+	if err != nil {
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	b, err := h.Svc.Repo.GetBookingByID(c.Request.Context(), bid)
+	if err != nil {
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, gin.H{
+		"photo": handoverPhotoPublic{
+			ID:        p.ID.String(),
+			Step:      string(p.Step),
+			BlobURL:   p.BlobURL,
+			CreatedAt: p.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
+		},
+		"booking": toBookingPublic(b, h.Svc),
+	})
 }
 
 func (h *BookingHandler) PostReview(c *gin.Context) {

@@ -56,6 +56,7 @@ export type BookingPaymentBreakdown = {
   payment_method?: string;
   paid_at?: string;
   agreed_base_inr: string;
+  trip_days?: number;
   customer_commission_percent: number;
   owner_commission_percent: number;
   customer_commission_inr: string;
@@ -85,15 +86,29 @@ export type BookingCancellation = {
   cancelled_by_role: string;
 };
 
+export type HandoverPhoto = {
+  id: string;
+  step: string;
+  blob_url: string;
+  created_at: string;
+};
+
 export type BookingHandover = {
+  owner_pickup_odometer_km?: number | null;
+  owner_pickup_fuel_percent?: number | null;
+  owner_pickup_notes?: string;
+  owner_pickup_recorded_at?: string | null;
   pickup_odometer_km?: number | null;
   pickup_fuel_percent?: number | null;
   pickup_notes?: string;
   pickup_recorded_at?: string | null;
+  customer_pickup_accepted_at?: string | null;
   return_odometer_km?: number | null;
   return_fuel_percent?: number | null;
   return_notes?: string;
   return_recorded_at?: string | null;
+  owner_return_accepted_at?: string | null;
+  photos?: HandoverPhoto[];
 };
 
 export type BookingReviewRow = {
@@ -111,6 +126,9 @@ export type Booking = {
   owner_id: string;
   status: string;
   final_booking_price?: string | null;
+  /** True when the customer accepted the owner's current quoted price. */
+  customer_price_accepted?: boolean;
+  customer_accepted_price_at?: string | null;
   customer_note?: string;
   rental_from: string;
   rental_to: string;
@@ -124,6 +142,9 @@ export type Booking = {
   payment?: BookingPaymentBreakdown;
   cancellation?: BookingCancellation | null;
   handover?: BookingHandover | null;
+  /** Rental lifecycle stage after deposit (e.g. awaiting_owner_handover, on_trip). */
+  trip_stage?: string;
+  trip_stage_label?: string;
   reviews?: BookingReviewRow[];
 };
 

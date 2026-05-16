@@ -76,7 +76,7 @@ export default function CustomerBookingsPage() {
                 <p className="text-sm text-slate-600">
                   Status: <span className="font-medium text-slate-900">{b.status}</span>
                   {b.final_booking_price && (
-                    <span className="ml-2">· Agreed ₹{b.final_booking_price}</span>
+                    <span className="ml-2">· Agreed rental per day ₹{b.final_booking_price}</span>
                   )}
                   {b.payment?.payment_status === "PAID" && (
                     <span className="ml-2 font-medium text-emerald-800">· Fully paid</span>

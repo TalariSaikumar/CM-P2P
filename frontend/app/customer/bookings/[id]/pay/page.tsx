@@ -7,6 +7,8 @@ import { apiJson, ApiError } from "@/lib/api";
 import { getToken, getUser } from "@/lib/session";
 import type { Booking, BookingPaymentBreakdown } from "@/lib/apitypes";
 import { ButtonCarSpinner, OverlayLoader, PageLoader } from "@/components/loaders";
+import { PricingCalculationTip } from "@/components/PricingCalculationTip";
+import { ratesFromPayment } from "@/lib/pricingCalculationExample";
 
 const METHODS = [
   { value: "UPI", label: "UPI", hint: "Pay with any UPI app" },
@@ -253,10 +255,19 @@ export default function CustomerPayBookingPage() {
         {/* Summary first on mobile so users see totals; sticky on desktop right */}
         <aside className="order-1 space-y-4 lg:order-2 lg:sticky lg:top-6">
           <div className="rounded-xl border border-slate-200 bg-gradient-to-b from-slate-50 to-white p-5 shadow-sm ring-1 ring-slate-100">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Order summary</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Order summary</h2>
+              <PricingCalculationTip variant="customer" rates={ratesFromPayment(breakdown)} />
+            </div>
             <ul className="mt-4 space-y-3 text-sm text-slate-700">
               <li className="flex justify-between gap-4">
-                <span>Agreed rental (base)</span>
+                <span>Agreed rental per day</span>
+                <span className="shrink-0 font-medium tabular-nums text-slate-900">
+                  ₹{booking.final_booking_price}
+                </span>
+              </li>
+              <li className="flex justify-between gap-4">
+                <span>Trip rental (incl. days)</span>
                 <span className="shrink-0 font-medium tabular-nums text-slate-900">₹{breakdown.agreed_base_inr}</span>
               </li>
               <li className="flex justify-between gap-4">

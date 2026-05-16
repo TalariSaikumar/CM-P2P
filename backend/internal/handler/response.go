@@ -169,6 +169,7 @@ type bookingPaymentPublic struct {
 	PaymentMethod              string  `json:"payment_method,omitempty"`
 	PaidAt                     *string `json:"paid_at,omitempty"`
 	AgreedBaseInr              string  `json:"agreed_base_inr"`
+	TripDays                   int     `json:"trip_days"`
 	CustomerCommissionPercent  float64 `json:"customer_commission_percent"`
 	OwnerCommissionPercent     float64 `json:"owner_commission_percent"`
 	CustomerCommissionInr      string  `json:"customer_commission_inr"`
@@ -198,14 +199,28 @@ type bookingCancellationPublic struct {
 }
 
 type bookingHandoverPublic struct {
-	PickupOdometerKm  *int    `json:"pickup_odometer_km,omitempty"`
-	PickupFuelPercent *int    `json:"pickup_fuel_percent,omitempty"`
-	PickupNotes       string  `json:"pickup_notes,omitempty"`
-	PickupRecordedAt  *string `json:"pickup_recorded_at,omitempty"`
-	ReturnOdometerKm  *int    `json:"return_odometer_km,omitempty"`
-	ReturnFuelPercent *int    `json:"return_fuel_percent,omitempty"`
-	ReturnNotes       string  `json:"return_notes,omitempty"`
-	ReturnRecordedAt  *string `json:"return_recorded_at,omitempty"`
+	OwnerPickupOdometerKm  *int    `json:"owner_pickup_odometer_km,omitempty"`
+	OwnerPickupFuelPercent *int    `json:"owner_pickup_fuel_percent,omitempty"`
+	OwnerPickupNotes       string  `json:"owner_pickup_notes,omitempty"`
+	OwnerPickupRecordedAt  *string `json:"owner_pickup_recorded_at,omitempty"`
+	PickupOdometerKm       *int    `json:"pickup_odometer_km,omitempty"`
+	PickupFuelPercent      *int    `json:"pickup_fuel_percent,omitempty"`
+	PickupNotes            string  `json:"pickup_notes,omitempty"`
+	PickupRecordedAt       *string `json:"pickup_recorded_at,omitempty"`
+	CustomerPickupAcceptedAt *string `json:"customer_pickup_accepted_at,omitempty"`
+	ReturnOdometerKm       *int    `json:"return_odometer_km,omitempty"`
+	ReturnFuelPercent      *int    `json:"return_fuel_percent,omitempty"`
+	ReturnNotes            string  `json:"return_notes,omitempty"`
+	ReturnRecordedAt         *string `json:"return_recorded_at,omitempty"`
+	OwnerReturnAcceptedAt    *string `json:"owner_return_accepted_at,omitempty"`
+	Photos                   []handoverPhotoPublic `json:"photos,omitempty"`
+}
+
+type handoverPhotoPublic struct {
+	ID        string `json:"id"`
+	Step      string `json:"step"`
+	BlobURL   string `json:"blob_url"`
+	CreatedAt string `json:"created_at"`
 }
 
 type bookingReviewPublic struct {
@@ -224,19 +239,43 @@ func ptrRFC3339(t *time.Time) *string {
 	return &s
 }
 
+func handoverPhotosFromBooking(b *models.Booking) []handoverPhotoPublic {
+	if len(b.HandoverPhotos) == 0 {
+		return nil
+	}
+	out := make([]handoverPhotoPublic, 0, len(b.HandoverPhotos))
+	for i := range b.HandoverPhotos {
+		p := b.HandoverPhotos[i]
+		out = append(out, handoverPhotoPublic{
+			ID:        p.ID.String(),
+			Step:      string(p.Step),
+			BlobURL:   p.BlobURL,
+			CreatedAt: p.CreatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+	return out
+}
+
 func handoverFromBooking(b *models.Booking) *bookingHandoverPublic {
-	if b.PickupHandoverAt == nil && b.ReturnHandoverAt == nil {
+	if !service.DepositPaidForTrip(b) {
 		return nil
 	}
 	return &bookingHandoverPublic{
-		PickupOdometerKm:  b.PickupOdometerKM,
-		PickupFuelPercent: b.PickupFuelPercent,
-		PickupNotes:       b.PickupHandoverNotes,
-		PickupRecordedAt:  ptrRFC3339(b.PickupHandoverAt),
-		ReturnOdometerKm:  b.ReturnOdometerKM,
-		ReturnFuelPercent: b.ReturnFuelPercent,
-		ReturnNotes:       b.ReturnHandoverNotes,
-		ReturnRecordedAt:  ptrRFC3339(b.ReturnHandoverAt),
+		OwnerPickupOdometerKm:    b.OwnerPickupOdometerKM,
+		OwnerPickupFuelPercent:   b.OwnerPickupFuelPercent,
+		OwnerPickupNotes:         b.OwnerPickupHandoverNotes,
+		OwnerPickupRecordedAt:    ptrRFC3339(b.OwnerPickupHandoverAt),
+		PickupOdometerKm:         b.PickupOdometerKM,
+		PickupFuelPercent:        b.PickupFuelPercent,
+		PickupNotes:              b.PickupHandoverNotes,
+		PickupRecordedAt:         ptrRFC3339(b.PickupHandoverAt),
+		CustomerPickupAcceptedAt: ptrRFC3339(b.CustomerPickupAcceptedAt),
+		ReturnOdometerKm:         b.ReturnOdometerKM,
+		ReturnFuelPercent:        b.ReturnFuelPercent,
+		ReturnNotes:              b.ReturnHandoverNotes,
+		ReturnRecordedAt:         ptrRFC3339(b.ReturnHandoverAt),
+		OwnerReturnAcceptedAt:    ptrRFC3339(b.OwnerReturnAcceptedAt),
+		Photos:                   handoverPhotosFromBooking(b),
 	}
 }
 
@@ -246,8 +285,10 @@ type bookingPublic struct {
 	CustomerID        string                 `json:"customer_id"`
 	OwnerID           string                 `json:"owner_id"`
 	Status            string                 `json:"status"`
-	FinalBookingPrice *string                `json:"final_booking_price,omitempty"`
-	CustomerNote      string                 `json:"customer_note,omitempty"`
+	FinalBookingPrice           *string `json:"final_booking_price,omitempty"`
+	CustomerPriceAccepted       bool    `json:"customer_price_accepted"`
+	CustomerAcceptedPriceAt     *string `json:"customer_accepted_price_at,omitempty"`
+	CustomerNote                string  `json:"customer_note,omitempty"`
 	RentalFrom        string                 `json:"rental_from"`
 	RentalTo          string                 `json:"rental_to"`
 	PickupPoint       string                 `json:"pickup_point"`
@@ -259,6 +300,8 @@ type bookingPublic struct {
 	Payment           *bookingPaymentPublic  `json:"payment,omitempty"`
 	Cancellation      *bookingCancellationPublic `json:"cancellation,omitempty"`
 	Handover          *bookingHandoverPublic     `json:"handover,omitempty"`
+	TripStage         string                     `json:"trip_stage,omitempty"`
+	TripStageLabel    string                     `json:"trip_stage_label,omitempty"`
 	Reviews           []bookingReviewPublic      `json:"reviews,omitempty"`
 }
 
@@ -285,6 +328,7 @@ func bookingPaymentFromBreakdown(b *models.Booking, bd service.PaymentBreakdown,
 		PaymentMethod:              b.PaymentMethod,
 		PaidAt:                     paidAt,
 		AgreedBaseInr:              bd.AgreedBase.StringFixed(2),
+		TripDays:                   service.TripDaysInclusive(b.RentalFrom, b.RentalTo),
 		CustomerCommissionPercent:  bd.CustomerCommissionPct,
 		OwnerCommissionPercent:     bd.OwnerCommissionPct,
 		CustomerCommissionInr:      bd.CustomerCommissionAmount.StringFixed(2),
@@ -325,8 +369,10 @@ func toBookingPublic(b *models.Booking, svc *service.BookingService) bookingPubl
 		CustomerID:        b.CustomerID.String(),
 		OwnerID:           b.OwnerID.String(),
 		Status:            string(b.Status),
-		FinalBookingPrice: ptrDec(b.FinalBookingPrice),
-		CustomerNote:      b.CustomerNote,
+		FinalBookingPrice:       ptrDec(b.FinalBookingPrice),
+		CustomerPriceAccepted:   service.CustomerHasAcceptedQuotedPrice(b),
+		CustomerAcceptedPriceAt: ptrRFC3339(b.CustomerAcceptedPriceAt),
+		CustomerNote:            b.CustomerNote,
 		RentalFrom:        b.RentalFrom.UTC().Format(time.RFC3339),
 		RentalTo:          b.RentalTo.UTC().Format(time.RFC3339),
 		PickupPoint:       b.PickupPoint,
@@ -336,7 +382,7 @@ func toBookingPublic(b *models.Booking, svc *service.BookingService) bookingPubl
 		Customer:          toUserSummary(&b.Customer),
 		Owner:             toUserSummary(&b.Owner),
 	}
-	if svc != nil && b.Status == models.BookingConfirmed && b.FinalBookingPrice != nil {
+	if svc != nil && b.FinalBookingPrice != nil && b.Status != models.BookingCancelled {
 		if bd, err := svc.BreakdownForBooking(b); err == nil {
 			sv := svc.SettlementView(b, bd)
 			bp.Payment = bookingPaymentFromBreakdown(b, bd, sv)
@@ -355,6 +401,11 @@ func toBookingPublic(b *models.Booking, svc *service.BookingService) bookingPubl
 	}
 	if h := handoverFromBooking(b); h != nil {
 		bp.Handover = h
+	}
+	if b.Status == models.BookingConfirmed || b.Status == models.BookingCompleted {
+		st := service.TripStageForBooking(b)
+		bp.TripStage = st.Code
+		bp.TripStageLabel = st.Label
 	}
 	if len(b.Reviews) > 0 {
 		bp.Reviews = make([]bookingReviewPublic, 0, len(b.Reviews))

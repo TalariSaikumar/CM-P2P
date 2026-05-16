@@ -115,12 +115,8 @@ func (s *BookingService) OwnerPutPostTripCharges(ctx context.Context, ownerID, b
 	default:
 		return nil, httpx.ErrConflict
 	}
-	now := time.Now().UTC()
-	if !now.After(b.RentalTo.UTC()) {
-		return nil, httpx.ErrSettlementTooEarly
-	}
-	if b.ReturnHandoverAt == nil {
-		return nil, httpx.ErrReturnHandoverRequired
+	if !CustomerReturnRecorded(b) {
+		return nil, httpx.ErrCustomerReturnRequired
 	}
 
 	const maxLines = 30
@@ -161,6 +157,7 @@ func (s *BookingService) OwnerPutPostTripCharges(ctx context.Context, ownerID, b
 		return nil, httpx.WrapValidation("Total post-trip charges exceed the allowed limit.")
 	}
 
+	now := time.Now().UTC()
 	if err := s.Repo.SavePostTripSettlement(ctx, bookingID, rows, sum, models.BookingPaymentFinalDue, now); err != nil {
 		return nil, err
 	}
