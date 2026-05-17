@@ -1,10 +1,12 @@
-# Staging (APP_ENV=stag) — prefer config/dev.yaml with APP_ENV=dev; kept for reference.
+# Staging (APP_ENV=stag) — use config/dev.yaml with APP_ENV=dev instead; this file is a stub.
+# Copy values from dev.yaml if you switch to APP_ENV=stag on Render.
+
 http_port: "8080"
 gin_mode: release
 
-database_url: "" # set for your staging database
+database_url: ""
 
-jwt_secret: "" # required — set a strong secret for staging
+jwt_secret: ""
 jwt_ttl_hours: 72
 
 allow_self_kyc_verify: false
@@ -28,9 +30,9 @@ razorpay:
   key_id: ""
   key_secret: ""
 
-# Deployed Next.js on Vercel (Razorpay dashboard → Website URL; CORS for API calls).
 app:
   public_url: https://cm-p2-p-frontend.vercel.app
+  deployed_public_url: https://cm-p2-p-frontend.vercel.app
 
 cors:
   allowed_origins:
