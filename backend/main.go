@@ -36,6 +36,9 @@ func resolveBackendRoot() string {
 		if _, err := os.Stat(filepath.Join(dir, ".env")); err == nil {
 			return dir
 		}
+		if _, err := os.Stat(filepath.Join(dir, "config")); err == nil {
+			return dir
+		}
 	}
 	_, file, _, _ := runtime.Caller(0)
 	return filepath.Dir(file)
