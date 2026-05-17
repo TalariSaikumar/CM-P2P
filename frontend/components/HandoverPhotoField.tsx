@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import { apiForm } from "@/lib/api";
 import type { Booking, HandoverPhoto } from "@/lib/apitypes";
@@ -17,6 +18,8 @@ type Props = {
   disabled?: boolean;
   pendingRef: React.MutableRefObject<File[]>;
 };
+
+const thumbClass = "h-16 w-16 rounded-md border object-cover";
 
 export function HandoverPhotoField({ step, photos, disabled, pendingRef }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,17 +62,27 @@ export function HandoverPhotoField({ step, photos, disabled, pendingRef }: Props
           {stepPhotos.map((p) => (
             <li key={p.id}>
               <a href={p.blob_url} target="_blank" rel="noopener noreferrer" className="block">
-                <img
+                <Image
                   src={p.blob_url}
-                  alt=""
-                  className="h-16 w-16 rounded-md border border-slate-200 object-cover"
+                  alt="Handover photo"
+                  width={64}
+                  height={64}
+                  className={`${thumbClass} border-slate-200`}
+                  unoptimized
                 />
               </a>
             </li>
           ))}
           {previews.map((url, i) => (
             <li key={`pending-${i}`}>
-              <img src={url} alt="" className="h-16 w-16 rounded-md border border-dashed border-slate-300 object-cover" />
+              <Image
+                src={url}
+                alt="Pending handover photo"
+                width={64}
+                height={64}
+                className={`${thumbClass} border-dashed border-slate-300`}
+                unoptimized
+              />
             </li>
           ))}
         </ul>

@@ -4,6 +4,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { apiForm, apiJson, ApiError } from "@/lib/api";
 import { getToken } from "@/lib/session";
+import Image from "next/image";
 import Link from "next/link";
 import type { CarMineRow } from "@/lib/apitypes";
 import { PaginationBar } from "@/components/PaginationBar";
@@ -121,12 +122,14 @@ export default function OwnerFleetPage() {
                 {!!c.images?.length && (
                   <div className="mt-2 flex flex-wrap gap-2">
                     {c.images.map((im) => (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
+                      <Image
                         key={im.id}
                         src={im.url}
                         alt=""
+                        width={112}
+                        height={80}
                         className="h-20 w-28 rounded-md object-cover"
+                        unoptimized
                       />
                     ))}
                   </div>

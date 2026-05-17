@@ -1,0 +1,54 @@
+# Validates the Next.js app on push/PR. Uses repository secrets when set.
+#
+# Add secrets: Settings → Secrets and variables → Actions
+#   NEXT_PUBLIC_API_URL  (optional; defaults to localhost for CI)
+
+name: Frontend CI
+
+on:
+  push:
+    branches: [main, Stag-PO]
+    paths:
+      - "frontend/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/frontend-ci.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - "package.json"
+      - "package-lock.json"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: stag
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure build env
+        run: |
+          if [ -n "${{ secrets.NEXT_PUBLIC_API_URL }}" ]; then
+            echo "NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }}" >> "$GITHUB_ENV"
+          else
+            echo "NEXT_PUBLIC_API_URL=http://localhost:8080/api" >> "$GITHUB_ENV"
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint -w frontend
+
+      - name: Build
+        run: npm run build -w frontend

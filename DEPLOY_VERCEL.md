@@ -66,6 +66,18 @@ in Razorpay onboarding (**Website**). You can change it later in the Razorpay da
 
 Vercel → Project → **Domains** → add your domain → update `CORS_ALLOWED_ORIGINS` and Razorpay website URL to match.
 
+## GitHub Actions secrets
+
+For CI builds and Docker deploys, add secrets in GitHub:  
+**Settings → Secrets and variables → Actions → New repository secret**
+
+Full list: [`.github/SECRETS.md`](.github/SECRETS.md)
+
+Minimum for Vercel + payments:
+
+- `NEXT_PUBLIC_API_URL` (GitHub + Vercel)
+- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` (API host only — never in frontend)
+
 ## Quick checklist
 
 - [ ] API deployed and `/api/health` works in the browser  
