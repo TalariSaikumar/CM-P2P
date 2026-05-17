@@ -23,3 +23,7 @@ payments:
   customer_commission_percent: 2
   owner_commission_percent: 1.5
   gst_percent_on_commission: 18
+
+razorpay:
+  key_id: ""
+  key_secret: ""

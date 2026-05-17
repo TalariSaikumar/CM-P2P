@@ -190,6 +190,8 @@ type bookingPaymentPublic struct {
 	FinalDueInr                string                      `json:"final_due_inr,omitempty"`
 	OwnerProjectedPayoutInr    string                      `json:"owner_projected_payout_inr,omitempty"`
 	PostTripItems              []bookingPostTripItemPublic `json:"post_trip_items,omitempty"`
+	CheckoutProvider           string                      `json:"checkout_provider,omitempty"`
+	RazorpayKeyID              string                      `json:"razorpay_key_id,omitempty"`
 }
 
 type bookingCancellationPublic struct {
@@ -313,7 +315,7 @@ func ptrDec(d *decimal.Decimal) *string {
 	return &s
 }
 
-func bookingPaymentFromBreakdown(b *models.Booking, bd service.PaymentBreakdown, sv service.PaymentSettlementView) *bookingPaymentPublic {
+func bookingPaymentFromBreakdown(b *models.Booking, bd service.PaymentBreakdown, sv service.PaymentSettlementView, checkout service.PaymentCheckoutInfo) *bookingPaymentPublic {
 	var paidAt *string
 	if b.PaidAt != nil && b.PaymentStatus == models.BookingPaymentPaid {
 		s := b.PaidAt.UTC().Format(time.RFC3339)
@@ -348,6 +350,8 @@ func bookingPaymentFromBreakdown(b *models.Booking, bd service.PaymentBreakdown,
 		PostTripChargesInr:         sv.PostTripChargesInr.StringFixed(2),
 		FinalDueInr:                sv.FinalDueInr.StringFixed(2),
 		OwnerProjectedPayoutInr:    sv.OwnerProjectedPayoutInr.StringFixed(2),
+		CheckoutProvider:           checkout.Provider,
+		RazorpayKeyID:              checkout.RazorpayKeyID,
 	}
 	if len(b.PostTripCharges) > 0 {
 		out.PostTripItems = make([]bookingPostTripItemPublic, 0, len(b.PostTripCharges))
@@ -385,7 +389,7 @@ func toBookingPublic(b *models.Booking, svc *service.BookingService) bookingPubl
 	if svc != nil && b.FinalBookingPrice != nil && b.Status != models.BookingCancelled {
 		if bd, err := svc.BreakdownForBooking(b); err == nil {
 			sv := svc.SettlementView(b, bd)
-			bp.Payment = bookingPaymentFromBreakdown(b, bd, sv)
+			bp.Payment = bookingPaymentFromBreakdown(b, bd, sv, svc.PaymentCheckoutInfo())
 		}
 	}
 	if b.Status == models.BookingCancelled && b.CancelledAt != nil {

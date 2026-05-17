@@ -71,6 +71,7 @@ func RegisterWithDeps(r *gin.RouterGroup, d Deps) {
 			custBook.POST("/bookings/:id/withdraw", bookH.Withdraw)
 			custBook.POST("/bookings/:id/accept-price", bookH.AcceptQuotedPrice)
 			custBook.GET("/bookings/:id/payment-preview", bookH.PaymentPreview)
+			custBook.POST("/bookings/:id/payment-order", bookH.CreatePaymentOrder)
 			custBook.POST("/bookings/:id/pay", bookH.Pay)
 		}
 

@@ -78,6 +78,9 @@ export type BookingPaymentBreakdown = {
   final_due_inr?: string;
   owner_projected_payout_inr?: string;
   post_trip_items?: BookingPostTripItem[];
+  /** razorpay | simulated — when razorpay, use Razorpay Checkout instead of demo card fields */
+  checkout_provider?: string;
+  razorpay_key_id?: string;
 };
 
 export type BookingCancellation = {

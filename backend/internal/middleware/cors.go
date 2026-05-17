@@ -1,21 +1,30 @@
 package middleware
 
 import (
+	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// CORS allows the Next.js dev server on localhost:3000 to call the API.
+// CORS allows browser clients (local Next.js dev and deployed Vercel origins).
 func CORS() gin.HandlerFunc {
 	allowed := map[string]struct{}{
 		"http://localhost:3000":  {},
 		"http://127.0.0.1:3000": {},
 	}
+	for _, o := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			allowed[o] = struct{}{}
+		}
+	}
+	allowVercel := strings.ToLower(strings.TrimSpace(os.Getenv("CORS_ALLOW_VERCEL"))) != "false"
 
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
-		if _, ok := allowed[origin]; ok {
+		if originAllowed(origin, allowed, allowVercel) {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Access-Control-Allow-Credentials", "true")
 		}
@@ -30,6 +39,19 @@ func CORS() gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+func originAllowed(origin string, allowed map[string]struct{}, allowVercel bool) bool {
+	if origin == "" {
+		return false
+	}
+	if _, ok := allowed[origin]; ok {
+		return true
+	}
+	if allowVercel && strings.HasPrefix(origin, "https://") && strings.HasSuffix(origin, ".vercel.app") {
+		return true
+	}
+	return false
 }
 
 // RequestID attaches a simple correlation id for logs (optional hook for later).

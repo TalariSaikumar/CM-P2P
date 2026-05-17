@@ -66,8 +66,8 @@ func NormalizePaymentMethod(s string) string {
 		return "CARD"
 	case "NET_BANKING", "NETBANKING":
 		return "NET_BANKING"
-	case "WALLET":
-		return "WALLET"
+	case "QR_CODE", "QR", "QRCODE":
+		return "QR_CODE"
 	default:
 		return ""
 	}

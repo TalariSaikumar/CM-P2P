@@ -492,7 +492,6 @@ export default function BookingChatPage() {
     isOwner &&
     booking.status === "CONFIRMED" &&
     (payStatus === "DEPOSIT_PAID" || payStatus === "FINAL_DUE") &&
-    payStatus !== "PAID" &&
     customerReturnDone;
   const customerPriceAccepted = !!booking.customer_price_accepted;
   const canCustomerAcceptPrice =

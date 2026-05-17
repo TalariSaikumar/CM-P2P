@@ -9,12 +9,18 @@ import type { Booking, BookingPaymentBreakdown } from "@/lib/apitypes";
 import { ButtonCarSpinner, OverlayLoader, PageLoader } from "@/components/loaders";
 import { PricingCalculationTip } from "@/components/PricingCalculationTip";
 import { ratesFromPayment } from "@/lib/pricingCalculationExample";
+import { isMobilePaymentDevice, openRazorpayCheckout } from "@/lib/razorpay";
+import { type UpiAppId, UpiAppPicker } from "@/components/UpiAppPicker";
 
 const METHODS = [
-  { value: "UPI", label: "UPI", hint: "Pay with any UPI app" },
+  {
+    value: "UPI",
+    label: "UPI",
+    hint: "Pick Google Pay, PhonePe, Paytm, or another app on your phone",
+  },
   { value: "CARD", label: "Card", hint: "Visa, Mastercard, RuPay" },
   { value: "NET_BANKING", label: "Net banking", hint: "Your bank’s login" },
-  { value: "WALLET", label: "Wallet", hint: "Phone-linked wallet" },
+  { value: "QR_CODE", label: "QR code", hint: "Scan with any UPI app" },
 ] as const;
 
 function digitsOnly(s: string): string {
@@ -24,10 +30,7 @@ function digitsOnly(s: string): string {
 function validateMethodFields(method: string, fields: Record<string, string>): string | null {
   switch (method) {
     case "UPI": {
-      const v = fields.upiId.trim();
-      if (!v) return "Enter your UPI ID.";
-      if (v.length < 3) return "UPI ID looks too short.";
-      if (!v.includes("@")) return "UPI ID usually looks like name@bank (e.g. you@oksbi).";
+      if (!fields.upiApp.trim()) return "Select a UPI app installed on your device.";
       return null;
     }
     case "CARD": {
@@ -45,9 +48,8 @@ function validateMethodFields(method: string, fields: Record<string, string>): s
       if (!fields.netbankPass.trim()) return "Enter your password or secure key.";
       return null;
     }
-    case "WALLET": {
-      const p = digitsOnly(fields.walletPhone);
-      if (p.length !== 10) return "Enter the 10-digit mobile number linked to your wallet.";
+    case "QR_CODE": {
+      if (fields.qrConfirmed !== "yes") return "Confirm you have scanned the QR code and completed payment.";
       return null;
     }
     default:
@@ -68,14 +70,14 @@ export default function CustomerPayBookingPage() {
   const [paying, setPaying] = useState(false);
   const [loadSettled, setLoadSettled] = useState(false);
 
-  const [upiId, setUpiId] = useState("");
+  const [selectedUpiApp, setSelectedUpiApp] = useState<UpiAppId | null>(null);
   const [cardNumber, setCardNumber] = useState("");
   const [cardExpiry, setCardExpiry] = useState("");
   const [cardCvv, setCardCvv] = useState("");
   const [cardName, setCardName] = useState("");
   const [netbankUser, setNetbankUser] = useState("");
   const [netbankPass, setNetbankPass] = useState("");
-  const [walletPhone, setWalletPhone] = useState("");
+  const [qrConfirmed, setQrConfirmed] = useState(false);
 
   const load = useCallback(async () => {
     if (!id) {
@@ -128,32 +130,74 @@ export default function CustomerPayBookingPage() {
   const field =
     "mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none focus:ring-1 focus:ring-slate-500";
 
+  const useRazorpay =
+    breakdown?.checkout_provider === "razorpay" && Boolean(breakdown?.razorpay_key_id?.trim());
+
   async function pay() {
-    if (!id) return;
-    const v = validateMethodFields(method, {
-      upiId,
-      cardNumber,
-      cardExpiry,
-      cardCvv,
-      cardName,
-      netbankUser,
-      netbankPass,
-      walletPhone,
-    });
-    if (v) {
-      setError(v);
-      return;
+    if (!id || !breakdown) return;
+
+    if (!useRazorpay) {
+      const v = validateMethodFields(method, {
+        upiApp: selectedUpiApp ?? "",
+        cardNumber,
+        cardExpiry,
+        cardCvv,
+        cardName,
+        netbankUser,
+        netbankPass,
+        qrConfirmed: qrConfirmed ? "yes" : "",
+      });
+      if (v) {
+        setError(v);
+        return;
+      }
     }
+
     setError(null);
     setPaying(true);
     try {
-      await apiJson(`/bookings/${id}/pay`, {
-        method: "POST",
-        body: JSON.stringify({ payment_method: method }),
-      });
+      if (useRazorpay) {
+        const keyId = breakdown.razorpay_key_id!.trim();
+        const orderRes = await apiJson<{
+          order_id: string;
+          amount_paise: number;
+          currency: string;
+          key_id: string;
+        }>(`/bookings/${id}/payment-order`, { method: "POST" });
+
+        const user = getUser();
+        const rz = await openRazorpayCheckout({
+          keyId: orderRes.key_id || keyId,
+          orderId: orderRes.order_id,
+          amountPaise: orderRes.amount_paise,
+          currency: orderRes.currency,
+          paymentMethod: method,
+          description:
+            breakdown.payment_phase === "final_due"
+              ? "CarManage — final trip balance"
+              : "CarManage — trip deposit",
+          prefillEmail: user?.email,
+          prefillContact: user?.phone_number,
+        });
+
+        await apiJson(`/bookings/${id}/pay`, {
+          method: "POST",
+          body: JSON.stringify({
+            payment_method: method,
+            razorpay_order_id: rz.razorpay_order_id,
+            razorpay_payment_id: rz.razorpay_payment_id,
+            razorpay_signature: rz.razorpay_signature,
+          }),
+        });
+      } else {
+        await apiJson(`/bookings/${id}/pay`, {
+          method: "POST",
+          body: JSON.stringify({ payment_method: method }),
+        });
+      }
       router.push(`/bookings/${id}`);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Payment failed");
+      setError(e instanceof ApiError ? e.message : e instanceof Error ? e.message : "Payment failed");
     } finally {
       setPaying(false);
     }
@@ -238,14 +282,15 @@ export default function CustomerPayBookingPage() {
             <>
               {" "}
               — you are paying the <strong>remaining trip balance</strong> plus any post-trip charges the owner
-              submitted (simulated checkout; no real card charge).
+              submitted
+              {useRazorpay ? " via Razorpay." : " (demo checkout; no real charge)."}
             </>
           ) : (
             <>
               {" "}
               — you pay <strong>{breakdown.deposit_percent ?? 75}%</strong> of your trip total now as a deposit. The
-              rest is due after the trip when the owner confirms any extra charges (simulated checkout; no real card
-              charge).
+              rest is due after the trip when the owner confirms any extra charges
+              {useRazorpay ? " via Razorpay." : " (demo checkout; no real charge)."}
             </>
           )}
         </p>
@@ -327,7 +372,13 @@ export default function CustomerPayBookingPage() {
         <div className="order-2 space-y-6 lg:order-1">
           <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <h2 className="text-base font-semibold text-slate-900">Payment method</h2>
-            <p className="mt-1 text-sm text-slate-500">Choose how you want to pay — fields appear for the option you select.</p>
+            <p className="mt-1 text-sm text-slate-500">
+              {useRazorpay
+                ? method === "UPI" && isMobilePaymentDevice()
+                  ? "Pay with UPI — you will pick an app installed on your phone (Google Pay, PhonePe, Paytm, etc.) in the next step."
+                  : "Choose how you want to pay — Razorpay Checkout opens when you continue."
+                : "Choose how you want to pay — fields appear for the option you select."}
+            </p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               {METHODS.map((m) => (
@@ -358,20 +409,32 @@ export default function CustomerPayBookingPage() {
               ))}
             </div>
 
+            {useRazorpay && method === "UPI" && (
+              <div className="mt-6 rounded-lg border border-emerald-200 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-950">
+                <p className="font-medium">UPI apps on your device</p>
+                <p className="mt-1 text-emerald-900/90">
+                  {isMobilePaymentDevice()
+                    ? "After you tap Pay, Razorpay will list UPI apps on your phone — choose Google Pay, PhonePe, Paytm, or another installed app."
+                    : "On desktop, Razorpay will show a QR code — scan it with any UPI app on your phone to pay."}
+                </p>
+              </div>
+            )}
+
+            {!useRazorpay && (
             <div className="mt-6 border-t border-slate-100 pt-6">
               {method === "UPI" && (
                 <div>
-                  <h3 className="text-sm font-medium text-slate-800">UPI details</h3>
-                  <label className="mt-3 block text-sm text-slate-700">
-                    UPI ID
-                    <input
-                      className={field}
-                      value={upiId}
-                      onChange={(e) => setUpiId(e.target.value)}
-                      placeholder="you@oksbi"
-                      autoComplete="off"
+                  <h3 className="text-sm font-medium text-slate-800">Choose your UPI app</h3>
+                  <div className="mt-3">
+                    <UpiAppPicker
+                      selected={selectedUpiApp}
+                      onSelect={(appId) => {
+                        setSelectedUpiApp(appId);
+                        setError(null);
+                      }}
+                      disabled={paying}
                     />
-                  </label>
+                  </div>
                 </div>
               )}
 
@@ -461,24 +524,46 @@ export default function CustomerPayBookingPage() {
                 </div>
               )}
 
-              {method === "WALLET" && (
+              {method === "QR_CODE" && (
                 <div>
-                  <h3 className="text-sm font-medium text-slate-800">Wallet</h3>
-                  <label className="mt-3 block text-sm text-slate-700">
-                    Mobile number linked to wallet
+                  <h3 className="text-sm font-medium text-slate-800">Scan to pay</h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Open Google Pay, PhonePe, Paytm, or any UPI app and scan this code for ₹{dueNowInr}.
+                  </p>
+                  <div
+                    className="mx-auto mt-4 flex h-44 w-44 items-center justify-center rounded-lg border-2 border-dashed border-slate-300 bg-white p-3"
+                    aria-hidden
+                  >
+                    <svg viewBox="0 0 120 120" className="h-full w-full text-slate-800">
+                      <rect width="120" height="120" fill="#fff" />
+                      <rect x="8" y="8" width="28" height="28" fill="currentColor" />
+                      <rect x="84" y="8" width="28" height="28" fill="currentColor" />
+                      <rect x="8" y="84" width="28" height="28" fill="currentColor" />
+                      <rect x="44" y="44" width="10" height="10" fill="currentColor" />
+                      <rect x="58" y="44" width="8" height="8" fill="currentColor" />
+                      <rect x="44" y="58" width="8" height="8" fill="currentColor" />
+                      <rect x="66" y="58" width="12" height="12" fill="currentColor" />
+                      <rect x="52" y="72" width="14" height="14" fill="currentColor" />
+                      <rect x="72" y="44" width="8" height="24" fill="currentColor" />
+                      <rect x="44" y="72" width="6" height="20" fill="currentColor" />
+                    </svg>
+                  </div>
+                  <p className="mt-3 text-center text-xs text-slate-500">
+                    Demo placeholder — with Razorpay enabled, the live QR opens in checkout.
+                  </p>
+                  <label className="mt-4 flex cursor-pointer items-start gap-2 text-sm text-slate-700">
                     <input
-                      className={field}
-                      inputMode="numeric"
-                      maxLength={10}
-                      value={walletPhone}
-                      onChange={(e) => setWalletPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                      placeholder="10-digit mobile"
-                      autoComplete="tel"
+                      type="checkbox"
+                      checked={qrConfirmed}
+                      onChange={(e) => setQrConfirmed(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-slate-900"
                     />
+                    <span>I have scanned the QR code and paid ₹{dueNowInr}</span>
                   </label>
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {error && (

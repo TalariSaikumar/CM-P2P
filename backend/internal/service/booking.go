@@ -547,7 +547,18 @@ func (s *BookingService) CustomerPaymentPreview(ctx context.Context, customerID,
 }
 
 // CustomerRecordPayment records the 75% deposit first, then the final balance after the owner submits post-trip charges.
-func (s *BookingService) CustomerRecordPayment(ctx context.Context, customerID, bookingID uuid.UUID, methodRaw string) (*models.Booking, error) {
+// When Razorpay is configured, proof must be supplied and is verified before updating the booking.
+func (s *BookingService) CustomerRecordPayment(ctx context.Context, customerID, bookingID uuid.UUID, methodRaw string, proof *RazorpayPaymentProof) (*models.Booking, error) {
+	razorpayOn := s.Config != nil && s.Config.RazorpayEnabled()
+	if razorpayOn {
+		if proof == nil {
+			return nil, httpx.ErrRazorpayProofRequired
+		}
+		if err := s.verifyRazorpayProof(*proof); err != nil {
+			return nil, err
+		}
+	}
+
 	method := NormalizePaymentMethod(methodRaw)
 	if method == "" {
 		return nil, httpx.ErrInvalidPaymentMethod

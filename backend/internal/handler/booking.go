@@ -574,7 +574,10 @@ func (h *BookingHandler) PostReview(c *gin.Context) {
 }
 
 type payBookingReq struct {
-	PaymentMethod string `json:"payment_method" binding:"required"`
+	PaymentMethod       string `json:"payment_method" binding:"required"`
+	RazorpayOrderID     string `json:"razorpay_order_id"`
+	RazorpayPaymentID   string `json:"razorpay_payment_id"`
+	RazorpaySignature   string `json:"razorpay_signature"`
 }
 
 func (h *BookingHandler) PaymentPreview(c *gin.Context) {
@@ -602,7 +605,42 @@ func (h *BookingHandler) PaymentPreview(c *gin.Context) {
 		return
 	}
 	sv := h.Svc.SettlementView(b, bd)
-	c.JSON(http.StatusOK, gin.H{"breakdown": bookingPaymentFromBreakdown(b, bd, sv)})
+	c.JSON(http.StatusOK, gin.H{
+		"breakdown": bookingPaymentFromBreakdown(b, bd, sv, h.Svc.PaymentCheckoutInfo()),
+		"checkout":  h.Svc.PaymentCheckoutInfo(),
+	})
+}
+
+func (h *BookingHandler) CreatePaymentOrder(c *gin.Context) {
+	idStr, ok := middleware.UserID(c)
+	if !ok {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "You need to sign in to continue.")
+		return
+	}
+	uid, err := uuid.Parse(idStr)
+	if err != nil {
+		httpx.Abort(c, http.StatusUnauthorized, "UNAUTHORIZED", "Your session is invalid. Please sign in again.")
+		return
+	}
+	bid, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid booking id.")
+		return
+	}
+	order, err := h.Svc.CustomerCreateRazorpayOrder(c.Request.Context(), uid, bid)
+	if err != nil {
+		if httpx.AbortService(c, err) {
+			return
+		}
+		httpx.AbortUnexpected(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"order_id":     order.OrderID,
+		"amount_paise": order.AmountPaise,
+		"currency":     order.Currency,
+		"key_id":       order.KeyID,
+	})
 }
 
 type putPostTripChargesReq service.OwnerPutPostTripChargesInput
@@ -669,7 +707,15 @@ func (h *BookingHandler) Pay(c *gin.Context) {
 		httpx.Abort(c, http.StatusBadRequest, "VALIDATION_ERROR", "Please check your input and try again.")
 		return
 	}
-	b, err := h.Svc.CustomerRecordPayment(c.Request.Context(), uid, bid, req.PaymentMethod)
+	var proof *service.RazorpayPaymentProof
+	if req.RazorpayOrderID != "" || req.RazorpayPaymentID != "" || req.RazorpaySignature != "" {
+		proof = &service.RazorpayPaymentProof{
+			OrderID:   req.RazorpayOrderID,
+			PaymentID: req.RazorpayPaymentID,
+			Signature: req.RazorpaySignature,
+		}
+	}
+	b, err := h.Svc.CustomerRecordPayment(c.Request.Context(), uid, bid, req.PaymentMethod, proof)
 	if err != nil {
 		if httpx.AbortService(c, err) {
 			return

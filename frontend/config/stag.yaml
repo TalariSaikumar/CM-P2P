@@ -1,4 +1,4 @@
-# Staging (APP_ENV=stag) — replace URLs with your staging API host.
+# Staging (APP_ENV=stag) — used on Vercel preview/production until NEXT_PUBLIC_API_URL is set in Vercel env.
 
-api_url: https://staging-api.example.com/api
+api_url: https://your-backend.onrender.com/api
 support_email: support-staging@yourcompany.com

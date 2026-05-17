@@ -46,6 +46,10 @@ type Config struct {
 	OwnerCommissionPercent    float64
 	// GST percent on customer subtotal (agreed rental + customer platform fee) and on owner agreed rental; see booking payment math.
 	GstPercentOnCommission float64
+
+	// Razorpay (live/test keys from dashboard). Secret should live in backend/.env, not YAML.
+	RazorpayKeyID     string
+	RazorpayKeySecret string
 }
 
 type yamlFile struct {
@@ -76,6 +80,16 @@ type yamlFile struct {
 		OwnerCommissionPercent    float64 `yaml:"owner_commission_percent"`
 		GstPercentOnCommission    float64 `yaml:"gst_percent_on_commission"`
 	} `yaml:"payments"`
+
+	Razorpay struct {
+		KeyID     string `yaml:"key_id"`
+		KeySecret string `yaml:"key_secret"`
+	} `yaml:"razorpay"`
+}
+
+// RazorpayEnabled is true when both API key and secret are configured.
+func (c *Config) RazorpayEnabled() bool {
+	return c != nil && strings.TrimSpace(c.RazorpayKeyID) != "" && strings.TrimSpace(c.RazorpayKeySecret) != ""
 }
 
 // Load reads backend/.env for APP_ENV only, then loads backend/config/<APP_ENV>.yaml.
@@ -185,6 +199,15 @@ func Load(backendRoot string) (*Config, error) {
 		azureContainer = v
 	}
 
+	rzpKeyID := strings.TrimSpace(y.Razorpay.KeyID)
+	rzpSecret := strings.TrimSpace(y.Razorpay.KeySecret)
+	if v := strings.TrimSpace(os.Getenv("RAZORPAY_KEY_ID")); v != "" {
+		rzpKeyID = v
+	}
+	if v := strings.TrimSpace(os.Getenv("RAZORPAY_KEY_SECRET")); v != "" {
+		rzpSecret = v
+	}
+
 	return &Config{
 		Environment:               rawEnv,
 		HTTPPort:                  port,
@@ -202,6 +225,8 @@ func Load(backendRoot string) (*Config, error) {
 		CustomerCommissionPercent: custComm,
 		OwnerCommissionPercent:    ownerComm,
 		GstPercentOnCommission:    gstOnComm,
+		RazorpayKeyID:             rzpKeyID,
+		RazorpayKeySecret:         rzpSecret,
 	}, nil
 }
 
