@@ -1,4 +1,4 @@
-# Production (APP_ENV=prod)
+# Production (APP_ENV=prod) — prefer config/dev.yaml with APP_ENV=dev; kept for reference.
 http_port: "8080"
 gin_mode: release
 
@@ -27,3 +27,10 @@ payments:
 razorpay:
   key_id: ""
   key_secret: ""
+
+app:
+  public_url: https://cm-p2-p-frontend.vercel.app
+
+cors:
+  allowed_origins:
+    - https://cm-p2-p-frontend.vercel.app

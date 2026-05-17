@@ -1,29 +1,28 @@
 package middleware
 
 import (
-	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-// CORS allows browser clients (local Next.js dev and deployed Vercel origins).
-func CORS() gin.HandlerFunc {
+// CORS allows browser clients (local dev, configured origins, and *.vercel.app).
+func CORS(extraOrigins []string) gin.HandlerFunc {
 	allowed := map[string]struct{}{
 		"http://localhost:3000":  {},
 		"http://127.0.0.1:3000": {},
 	}
-	for _, o := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
+	for _, o := range extraOrigins {
 		o = strings.TrimSpace(o)
 		if o != "" {
-			allowed[o] = struct{}{}
+			allowed[strings.TrimRight(o, "/")] = struct{}{}
 		}
 	}
-	allowVercel := strings.ToLower(strings.TrimSpace(os.Getenv("CORS_ALLOW_VERCEL"))) != "false"
+	allowVercel := true
 
 	return func(c *gin.Context) {
-		origin := c.GetHeader("Origin")
+		origin := strings.TrimRight(strings.TrimSpace(c.GetHeader("Origin")), "/")
 		if originAllowed(origin, allowed, allowVercel) {
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Access-Control-Allow-Credentials", "true")

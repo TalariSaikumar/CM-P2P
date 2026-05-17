@@ -225,12 +225,10 @@ export default function Home() {
             Set <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">APP_ENV</code> to{" "}
             <code className="font-mono text-slate-700">dev</code>, <code className="font-mono text-slate-700">stag</code>
             , or <code className="font-mono text-slate-700">prod</code> in{" "}
-            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">frontend/.env</code> or{" "}
-            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">.env.local</code>. API URL
+            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">frontend/.env</code>. API URL
             and support email load from{" "}
             <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">frontend/config/</code>
-            <code className="font-mono text-slate-700">{"{APP_ENV}"}.yaml</code>. Override with{" "}
-            <code className="font-mono text-slate-700">NEXT_PUBLIC_*</code> in <code className="font-mono text-slate-700">.env.local</code> if needed.
+            <code className="font-mono text-slate-700">{"{APP_ENV}"}.yaml</code>.
           </p>
           <div className="mt-6 border-t border-slate-200 pt-6">
             <p className="font-medium text-slate-800">Contact support</p>
@@ -248,9 +246,7 @@ export default function Home() {
               <p className="mt-2 text-slate-600">
                 Set <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">support_email</code> in{" "}
                 <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">frontend/config/</code>
-                <code className="font-mono text-slate-700">{"{APP_ENV}"}.yaml</code>, or{" "}
-                <code className="font-mono text-slate-700">NEXT_PUBLIC_SUPPORT_EMAIL</code> in{" "}
-                <code className="font-mono text-slate-700">.env.local</code>.
+                <code className="font-mono text-slate-700">{"{APP_ENV}"}.yaml</code>.
               </p>
             )}
           </div>

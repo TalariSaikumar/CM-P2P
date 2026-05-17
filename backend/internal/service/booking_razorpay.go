@@ -108,6 +108,9 @@ func (s *BookingService) CustomerCreateRazorpayOrder(ctx context.Context, custom
 		"booking_id": bookingID.String(),
 		"phase":      phase,
 	}
+	if s.Config != nil && strings.TrimSpace(s.Config.PublicAppURL) != "" {
+		notes["app_url"] = strings.TrimSpace(s.Config.PublicAppURL)
+	}
 	order, err := s.razorpayClient().CreateOrder(paise, paymentReceipt(bookingID, phase), notes)
 	if err != nil {
 		return nil, httpx.NewError(502, "PAYMENT_GATEWAY_ERROR", "Could not start payment. Please try again.")

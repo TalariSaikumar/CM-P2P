@@ -10,16 +10,11 @@ The **Next.js app** (`frontend/`) runs on Vercel. The **Go API** (`backend/`) mu
 2. Go to [vercel.com/new](https://vercel.com/new) and import the repository.
 3. **Root Directory:** click Edit → set to **`frontend`**.
 4. Framework should auto-detect **Next.js**.
-5. Add **Environment Variables** (Production and Preview):
-
-   | Name | Example |
-   |------|---------|
-   | `APP_ENV` | `stag` or `prod` |
-   | `NEXT_PUBLIC_API_URL` | `https://your-api.onrender.com/api` |
+5. Add **Environment Variables** (Production and Preview): only **`APP_ENV`** (`dev`, `stag`, or `prod`). Edit `frontend/config/{APP_ENV}.yaml` in the repo for `api_url`, etc.
 
 6. Click **Deploy**.
 
-Your site will be at `https://<project>.vercel.app`. Use that URL in **Razorpay → Website**.
+Your site is at **`https://cm-p2-p-frontend.vercel.app`**. Use that URL in **Razorpay → Website** (no trailing slash).
 
 ### Option B — Deploy from repo root (npm workspaces)
 
@@ -32,35 +27,22 @@ Your site will be at `https://<project>.vercel.app`. Use that URL in **Razorpay 
 Until the Go API is deployed, the Vercel site cannot log in or pay.
 
 1. Deploy `backend/` to a host with PostgreSQL (e.g. Render web service).
-2. Set on the API host:
-   - `DATABASE_URL`, `JWT_SECRET`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`
-   - `CORS_ALLOWED_ORIGINS=https://your-project.vercel.app` (comma-separated for multiple)
-3. Set on Vercel:
-   - `NEXT_PUBLIC_API_URL=https://<your-api-host>/api`
+2. Run the API with `APP_ENV=dev` in `backend/.env`; configure `backend/config/dev.yaml` (database, JWT, Razorpay, CORS).
+3. On Vercel set only `APP_ENV=dev` in project env; set `api_url` in `frontend/config/dev.yaml`, then redeploy.
 
-Redeploy Vercel after changing env vars.
+Redeploy Vercel after changing `dev.yaml` or env vars.
 
 ## 3. CORS on the backend
 
-Local dev allows `http://localhost:3000`. For Vercel, add in **`backend/.env`** (local) or your API host env:
-
-```env
-CORS_ALLOWED_ORIGINS=https://your-project.vercel.app,https://your-project-git-main-you.vercel.app
-```
-
-By default, `https://*.vercel.app` preview URLs are also allowed unless you set:
-
-```env
-CORS_ALLOW_VERCEL=false
-```
+With `APP_ENV=dev`, `backend/config/dev.yaml` lists localhost and `https://cm-p2-p-frontend.vercel.app` under `cors.allowed_origins`. All `https://*.vercel.app` preview URLs are also allowed by default.
 
 ## 4. Razorpay website URL
 
 After the first Vercel deploy, use:
 
-`https://<your-project>.vercel.app`
+**`https://cm-p2-p-frontend.vercel.app`**
 
-in Razorpay onboarding (**Website**). You can change it later in the Razorpay dashboard.
+in Razorpay → **Account & Settings** → **Website**. Payment orders also store this URL in Razorpay order notes (`app_url`).
 
 ## 5. Optional: custom domain
 
@@ -81,7 +63,7 @@ Minimum for Vercel + payments:
 ## Quick checklist
 
 - [ ] API deployed and `/api/health` works in the browser  
-- [ ] `NEXT_PUBLIC_API_URL` set on Vercel  
+- [ ] `APP_ENV=dev` on Vercel and `api_url` set in `frontend/config/dev.yaml`  
 - [ ] `CORS_ALLOWED_ORIGINS` includes your Vercel URL on the API  
 - [ ] Razorpay keys on the API host  
 - [ ] Razorpay dashboard website = your Vercel URL  

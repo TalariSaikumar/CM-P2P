@@ -1,4 +1,5 @@
-# Production (APP_ENV=prod) — replace URLs with your production API host.
+# Production — prefer config/dev.yaml with APP_ENV=dev; values copied into dev.yaml as *_prod keys.
 
 api_url: https://api.example.com/api
+app_url: https://cm-p2-p-frontend.vercel.app
 support_email: support@yourcompany.com

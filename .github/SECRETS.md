@@ -3,7 +3,7 @@
 Add these under **Settings → Secrets and variables → Actions → Repository secrets**  
 ([github.com/TalariSaikumar/CM-P2P/settings/secrets/actions](https://github.com/TalariSaikumar/CM-P2P/settings/secrets/actions)).
 
-Never commit real values to git. `backend/.env` and `.env.local` stay gitignored.
+`.env` files only set `APP_ENV`; put secrets in `backend/config/{APP_ENV}.yaml` (do not commit real production secrets). `backend/.env` is gitignored.
 
 ---
 
@@ -35,7 +35,8 @@ Set on your **hosting platform**, not in the Docker image. Optional: mirror in G
 | `AZURE_STORAGE_ACCOUNT` | For uploads | Blob storage account name |
 | `AZURE_STORAGE_KEY` | For uploads | Blob storage key |
 | `AZURE_STORAGE_CONTAINER` | For uploads | Container name |
-| `CORS_ALLOWED_ORIGINS` | For Vercel | `https://your-app.vercel.app` |
+| `CORS_ALLOWED_ORIGINS` | For Vercel | `https://cm-p2-p-frontend.vercel.app` |
+| `PUBLIC_APP_URL` | Razorpay notes / CORS | `https://cm-p2-p-frontend.vercel.app` |
 | `TWILIO_ACCOUNT_SID` | Optional | SMS |
 | `TWILIO_AUTH_TOKEN` | Optional | SMS |
 | `TWILIO_FROM_NUMBER` | Optional | SMS |

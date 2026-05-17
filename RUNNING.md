@@ -96,7 +96,7 @@ Requirements:
 You can run commands from the **repo root** (`CM-P2P/`) or from **`frontend/`** — the root `package.json` uses an npm **workspace** so `npm install` and `npm run dev` work from either place.
 
 1. Open a second terminal (repo root or `frontend/`).
-2. **`frontend/.env`** is committed with **`APP_ENV=dev`**. Edit **`APP_ENV`** there for `stag` / `prod`, or add **`frontend/.env.local`** for overrides. The app loads **`frontend/config/{APP_ENV}.yaml`** for `api_url` and `support_email` (wired to `NEXT_PUBLIC_*` in `next.config.mjs`).
+2. **`frontend/.env`** and **`backend/.env`** only set **`APP_ENV=dev`** (change to `stag` / `prod` when needed). Credentials and URLs live in **`config/{APP_ENV}.yaml`** for each app.
 3. Install dependencies (from repo root **or** `frontend/`):
    - `npm install`
 4. Start dev server:

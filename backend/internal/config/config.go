@@ -47,9 +47,14 @@ type Config struct {
 	// GST percent on customer subtotal (agreed rental + customer platform fee) and on owner agreed rental; see booking payment math.
 	GstPercentOnCommission float64
 
-	// Razorpay (live/test keys from dashboard). Secret should live in backend/.env, not YAML.
+	// Razorpay (from config/<APP_ENV>.yaml).
 	RazorpayKeyID     string
 	RazorpayKeySecret string
+
+	// PublicAppURL is the deployed web app (e.g. Vercel) — used in Razorpay notes and CORS.
+	PublicAppURL string
+	// CORSAllowedOrigins are extra browser origins allowed to call the API (in addition to localhost).
+	CORSAllowedOrigins []string
 }
 
 type yamlFile struct {
@@ -85,6 +90,15 @@ type yamlFile struct {
 		KeyID     string `yaml:"key_id"`
 		KeySecret string `yaml:"key_secret"`
 	} `yaml:"razorpay"`
+
+	App struct {
+		PublicURL         string `yaml:"public_url"`
+		DeployedPublicURL string `yaml:"deployed_public_url"`
+	} `yaml:"app"`
+
+	CORS struct {
+		AllowedOrigins []string `yaml:"allowed_origins"`
+	} `yaml:"cors"`
 }
 
 // RazorpayEnabled is true when both API key and secret are configured.
@@ -92,7 +106,7 @@ func (c *Config) RazorpayEnabled() bool {
 	return c != nil && strings.TrimSpace(c.RazorpayKeyID) != "" && strings.TrimSpace(c.RazorpayKeySecret) != ""
 }
 
-// Load reads backend/.env for APP_ENV only, then loads backend/config/<APP_ENV>.yaml.
+// Load reads backend/.env for APP_ENV (dev|stag|prod), then loads all settings from backend/config/<APP_ENV>.yaml.
 // backendRoot is the directory that contains .env and the config/ folder (the module root).
 func Load(backendRoot string) (*Config, error) {
 	envPath := filepath.Join(backendRoot, ".env")
@@ -179,33 +193,31 @@ func Load(backendRoot string) (*Config, error) {
 		gstOnComm = 18
 	}
 
-	// Optional env overrides (backend/.env) so secrets are not committed in YAML.
-	if v := strings.TrimSpace(os.Getenv("DATABASE_URL")); v != "" {
-		dbURL = v
-	}
-	if v := strings.TrimSpace(os.Getenv("JWT_SECRET")); v != "" {
-		jwt = v
-	}
 	azureAccount := strings.TrimSpace(y.Azure.StorageAccount)
 	azureKey := strings.TrimSpace(y.Azure.StorageKey)
 	azureContainer := strings.TrimSpace(y.Azure.StorageContainer)
-	if v := strings.TrimSpace(os.Getenv("AZURE_STORAGE_ACCOUNT")); v != "" {
-		azureAccount = v
-	}
-	if v := strings.TrimSpace(os.Getenv("AZURE_STORAGE_KEY")); v != "" {
-		azureKey = v
-	}
-	if v := strings.TrimSpace(os.Getenv("AZURE_STORAGE_CONTAINER")); v != "" {
-		azureContainer = v
-	}
 
 	rzpKeyID := strings.TrimSpace(y.Razorpay.KeyID)
 	rzpSecret := strings.TrimSpace(y.Razorpay.KeySecret)
-	if v := strings.TrimSpace(os.Getenv("RAZORPAY_KEY_ID")); v != "" {
-		rzpKeyID = v
+
+	publicURL := strings.TrimSpace(y.App.PublicURL)
+	publicURL = strings.TrimRight(publicURL, "/")
+
+	deployedURL := strings.TrimSpace(y.App.DeployedPublicURL)
+	deployedURL = strings.TrimRight(deployedURL, "/")
+
+	corsOrigins := make([]string, 0, len(y.CORS.AllowedOrigins))
+	for _, o := range y.CORS.AllowedOrigins {
+		o = strings.TrimSpace(o)
+		if o != "" {
+			corsOrigins = append(corsOrigins, strings.TrimRight(o, "/"))
+		}
 	}
-	if v := strings.TrimSpace(os.Getenv("RAZORPAY_KEY_SECRET")); v != "" {
-		rzpSecret = v
+	if publicURL != "" {
+		corsOrigins = append(corsOrigins, publicURL)
+	}
+	if deployedURL != "" {
+		corsOrigins = append(corsOrigins, deployedURL)
 	}
 
 	return &Config{
@@ -227,6 +239,8 @@ func Load(backendRoot string) (*Config, error) {
 		GstPercentOnCommission:    gstOnComm,
 		RazorpayKeyID:             rzpKeyID,
 		RazorpayKeySecret:         rzpSecret,
+		PublicAppURL:              publicURL,
+		CORSAllowedOrigins:        corsOrigins,
 	}, nil
 }
 

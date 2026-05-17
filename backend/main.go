@@ -96,7 +96,7 @@ func main() {
 	r := gin.New()
 	r.Use(gin.Logger())
 	r.Use(middleware.RequestID())
-	r.Use(middleware.CORS())
+	r.Use(middleware.CORS(cfg.CORSAllowedOrigins))
 	r.Use(middleware.GlobalErrorHandler())
 	r.MaxMultipartMemory = 32 << 20 // 32 MiB
 

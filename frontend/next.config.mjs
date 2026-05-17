@@ -35,6 +35,7 @@ const APP_ENV_MODES = ["dev", "stag", "prod"];
 /** Map YAML keys under config/{APP_ENV}.yaml → process.env keys */
 const YAML_TO_ENV = {
   api_url: "NEXT_PUBLIC_API_URL",
+  app_url: "NEXT_PUBLIC_APP_URL",
   support_email: "NEXT_PUBLIC_SUPPORT_EMAIL",
 };
 
@@ -64,14 +65,10 @@ function loadYamlAppConfig(appEnv) {
   }
 }
 
-/**
- * Apply YAML values only when the target env var is still unset (so .env /
- * .env.local overrides win).
- */
+/** Apply values from config/{APP_ENV}.yaml (frontend/.env should only set APP_ENV). */
 function applyYamlToProcessEnv(doc) {
   if (!doc) return;
   for (const [yamlKey, envKey] of Object.entries(YAML_TO_ENV)) {
-    if (process.env[envKey] !== undefined) continue;
     const raw = doc[yamlKey];
     if (raw == null) continue;
     const val = String(raw).trim();

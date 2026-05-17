@@ -1,14 +1,20 @@
-# Local development (APP_ENV=dev)
-# Do not commit real secrets — use placeholders; override locally if needed (untracked copy or env).
+# Development (APP_ENV=dev) — includes every key from config/stag.yaml and config/prod.yaml.
+# backend/.env must only set APP_ENV=dev (all values below come from this file).
+
 http_port: "8080"
 gin_mode: debug
+# stag/prod use: gin_mode: release
 
 database_url: "postgres://postgres:postgres@localhost:5432/carmanage?sslmode=disable"
+# stag/prod: set your hosted Postgres URL in database_url when not using local DB
 
 jwt_secret: "change-me-in-development-only"
+# stag/prod: use a strong secret (required)
+
 jwt_ttl_hours: 72
 
 allow_self_kyc_verify: true
+# stag/prod: allow_self_kyc_verify: false
 
 azure:
   storage_account: ""
@@ -19,4 +25,23 @@ twilio:
   account_sid: ""
   auth_token: ""
   from_number: ""
-  support_email: ""
+
+payments:
+  customer_commission_percent: 2
+  owner_commission_percent: 1.5
+  gst_percent_on_commission: 18
+
+razorpay:
+  key_id: "rzp_test_SqOnnK1iP8U6Qb"
+  key_secret: "NIyBNNuGDvlkv1TIfpCaQBmN"
+
+app:
+  public_url: http://localhost:3000
+  # stag/prod deployed frontend (Razorpay website URL):
+  deployed_public_url: https://cm-p2-p-frontend.vercel.app
+
+cors:
+  allowed_origins:
+    - http://localhost:3000
+    - http://127.0.0.1:3000
+    - https://cm-p2-p-frontend.vercel.app

@@ -1,4 +1,5 @@
-# Staging (APP_ENV=stag) — used on Vercel preview/production until NEXT_PUBLIC_API_URL is set in Vercel env.
+# Staging — prefer config/dev.yaml with APP_ENV=dev; values copied into dev.yaml as *_stag keys.
 
 api_url: https://your-backend.onrender.com/api
+app_url: https://cm-p2-p-frontend.vercel.app
 support_email: support-staging@yourcompany.com
