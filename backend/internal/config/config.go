@@ -106,23 +106,22 @@ func (c *Config) RazorpayEnabled() bool {
 	return c != nil && strings.TrimSpace(c.RazorpayKeyID) != "" && strings.TrimSpace(c.RazorpayKeySecret) != ""
 }
 
-// Load reads backend/.env for APP_ENV (dev|stag|prod), then loads all settings from backend/config/<APP_ENV>.yaml.
+// Load reads APP_ENV from the process environment or optional backend/.env (local dev),
+// then loads all settings from backend/config/<APP_ENV>.yaml.
 // backendRoot is the directory that contains .env and the config/ folder (the module root).
 func Load(backendRoot string) (*Config, error) {
 	envPath := filepath.Join(backendRoot, ".env")
-	if _, err := os.Stat(envPath); err != nil {
-		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("missing %s: create it with APP_ENV=dev|stag|prod", envPath)
+	if _, err := os.Stat(envPath); err == nil {
+		if err := godotenv.Load(envPath); err != nil {
+			return nil, fmt.Errorf("load .env: %w", err)
 		}
+	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("stat .env: %w", err)
-	}
-	if err := godotenv.Load(envPath); err != nil {
-		return nil, fmt.Errorf("load .env: %w", err)
 	}
 
 	rawEnv := strings.TrimSpace(strings.ToLower(os.Getenv("APP_ENV")))
 	if rawEnv == "" {
-		return nil, fmt.Errorf("APP_ENV is required in .env (use dev, stag, or prod)")
+		return nil, fmt.Errorf("APP_ENV is required (set in backend/.env locally or as an env var on the host, e.g. Render)")
 	}
 	switch rawEnv {
 	case EnvDev, EnvStag, EnvProd:
