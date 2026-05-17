@@ -52,6 +52,8 @@ export function BookingSummaryCard({
   const fromLabel = formatTripDateShort(booking.rental_from);
   const toLabel = formatTripDateShort(booking.rental_to);
   const payment = booking.payment;
+  const effectiveTripDays =
+    payment?.trip_days && payment.trip_days > 0 ? payment.trip_days : tripDays;
   const ownerEarnings =
     viewerRole === "owner" && payment ? ownerEarningsInr(payment, postTripInr) : null;
   const negotiating = isNegotiating(booking.status);
@@ -89,10 +91,8 @@ export function BookingSummaryCard({
         <div className="border-b border-slate-100 px-4 py-3 sm:border-b-0 sm:border-r">
           <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">Trip</dt>
           <dd className="mt-1 text-base font-semibold text-slate-900">
-            {payment?.trip_days && payment.trip_days > 0 ? payment.trip_days : tripDays}{" "}
-            {(payment?.trip_days && payment.trip_days > 0 ? payment.trip_days : tripDays) === 1
-              ? "day"
-              : "days"}
+            {effectiveTripDays}{" "}
+            {effectiveTripDays === 1 ? "day" : "days"}
           </dd>
           <dd className="mt-2 space-y-0.5 text-sm text-slate-600">
             <p>{fromLabel}</p>
@@ -150,9 +150,7 @@ export function BookingSummaryCard({
               <dd className="flex justify-between gap-3 text-sm">
                 <span className="text-slate-600">
                   Trip rental
-                  {(payment.trip_days > 0 ? payment.trip_days : tripDays) > 1
-                    ? ` (${payment.trip_days > 0 ? payment.trip_days : tripDays} days)`
-                    : ""}
+                  {effectiveTripDays > 1 ? ` (${effectiveTripDays} days)` : ""}
                 </span>
                 <span className="shrink-0 tabular-nums font-medium text-slate-900">
                   ₹{payment.agreed_base_inr}

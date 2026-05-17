@@ -507,6 +507,7 @@ export default function BookingChatPage() {
     booking.status !== "CANCELLED";
 
   function cancelTripEdit() {
+    if (!booking) return;
     setTripEditorUserOpen(false);
     setTripFrom(booking.rental_from.slice(0, 10));
     setTripTo(booking.rental_to.slice(0, 10));
@@ -528,7 +529,7 @@ export default function BookingChatPage() {
               postTripInr={postTripInr}
               viewerRole={isOwner ? "owner" : isCustomer ? "customer" : null}
             />
-            {customerNeedsDeposit && (
+            {customerNeedsDeposit && booking.payment && (
               <p className="mt-2">
                 <Link
                   href={`/customer/bookings/${booking.id}/pay`}
@@ -538,7 +539,7 @@ export default function BookingChatPage() {
                 </Link>
               </p>
             )}
-            {customerNeedsFinal && (
+            {customerNeedsFinal && booking.payment && (
               <p className="mt-2">
                 <Link
                   href={`/customer/bookings/${booking.id}/pay`}
