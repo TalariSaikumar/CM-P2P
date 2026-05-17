@@ -1,13 +1,17 @@
 # Development (APP_ENV=dev) — includes every key from config/stag.yaml and config/prod.yaml.
 # frontend/.env must only set APP_ENV=dev (all values below come from this file).
 
-# Local (default)
-api_url: http://localhost:8080/api
-app_url: http://localhost:3000
+# Hosted API (Render) — used by Vercel when APP_ENV=dev
+api_url: https://carmanage-api.onrender.com/api
+app_url: https://cm-p2-p-frontend.vercel.app
 support_email: support@yourcompany.com
 
-# From config/stag.yaml (use these values when testing Vercel / hosted API)
-api_url_stag: https://your-backend.onrender.com/api
+# Local development (swap api_url / app_url to these when running next dev + local API)
+api_url_local: http://localhost:8080/api
+app_url_local: http://localhost:3000
+
+# Reference (Render)
+api_url_stag: https://carmanage-api.onrender.com/api
 app_url_stag: https://cm-p2-p-frontend.vercel.app
 support_email_stag: support-staging@yourcompany.com
 

@@ -24,7 +24,7 @@ Your site is at **`https://cm-p2-p-frontend.vercel.app`**. Use that URL in **Raz
 
 ## 2. Point the frontend at your API
 
-Until the Go API is deployed, the Vercel site cannot log in or pay.
+Hosted API: **`https://carmanage-api.onrender.com`** (Render service `srv-d84q1phkh4rs73dc5da0`).
 
 1. Deploy `backend/` to a host with PostgreSQL (e.g. Render web service).
 2. Run the API with `APP_ENV=dev` in `backend/.env`; configure `backend/config/dev.yaml` (database, JWT, Razorpay, CORS).
