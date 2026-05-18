@@ -221,16 +221,7 @@ export default function Home() {
 
       <footer className="border-t border-slate-200 bg-slate-50 px-4 py-8 pb-[max(2rem,env(safe-area-inset-bottom))] sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl text-center text-xs text-slate-500">
-          <p className="break-words">
-            Set <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">APP_ENV</code> to{" "}
-            <code className="font-mono text-slate-700">dev</code>, <code className="font-mono text-slate-700">stag</code>
-            , or <code className="font-mono text-slate-700">prod</code> in{" "}
-            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">frontend/.env</code>. API URL
-            and support email load from{" "}
-            <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">frontend/config/</code>
-            <code className="font-mono text-slate-700">{"{APP_ENV}"}.yaml</code>.
-          </p>
-          <div className="mt-6 border-t border-slate-200 pt-6">
+          <div>
             <p className="font-medium text-slate-800">Contact support</p>
             {supportEmail ? (
               <p className="mt-2 break-words text-slate-600">
@@ -243,11 +234,7 @@ export default function Home() {
                 </a>
               </p>
             ) : (
-              <p className="mt-2 text-slate-600">
-                Set <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">support_email</code> in{" "}
-                <code className="rounded bg-slate-200/80 px-1.5 py-0.5 font-mono text-slate-700">frontend/config/</code>
-                <code className="font-mono text-slate-700">{"{APP_ENV}"}.yaml</code>.
-              </p>
+              <p className="mt-2 text-slate-600">Support contact is not available right now. Please try again later.</p>
             )}
           </div>
           <p className="mt-6 text-slate-400">CarManage · P2P car rental</p>
